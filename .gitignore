@@ -1,0 +1,13 @@
+*.ytdl
+*.part
+*.mp3
+*.mp4
+*.mkv
+*.webm
+*.webp
+DS_Store
+.DS_Store
+Thumbs.db
+__pycache__/
+env/
+download_history.json
