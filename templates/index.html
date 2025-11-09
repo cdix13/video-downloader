@@ -69,6 +69,115 @@
         font-size: 1.1rem;
       }
 
+      .server-info {
+        margin-top: 20px;
+        padding: 15px;
+        background: var(--bg-secondary);
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        display: inline-block;
+      }
+
+      .server-info-content {
+        display: flex;
+        gap: 25px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .server-urls {
+        flex: 1;
+        min-width: 300px;
+      }
+
+      .qr-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .qr-code {
+        padding: 15px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 5px 20px rgba(0, 212, 255, 0.2);
+      }
+
+      .qr-code img {
+        display: block;
+        width: 180px;
+        height: 180px;
+      }
+
+      .qr-label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        text-align: center;
+      }
+
+      .server-info-title {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .server-url {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 5px;
+      }
+
+      .url-label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        min-width: 120px;
+      }
+
+      .url-value {
+        font-family: "Courier New", monospace;
+        color: var(--accent-primary);
+        font-size: 0.95rem;
+        padding: 5px 12px;
+        background: var(--bg-primary);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+
+      .url-value:hover {
+        background: var(--border);
+        transform: translateY(-1px);
+      }
+
+      .copy-icon {
+        font-size: 1.2rem;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: all 0.3s;
+      }
+
+      .copy-icon:hover {
+        opacity: 1;
+        transform: scale(1.2);
+      }
+
+      .network-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        background: rgba(0, 212, 255, 0.1);
+        border: 1px solid var(--accent-primary);
+        border-radius: 20px;
+        font-size: 0.8rem;
+        margin-top: 8px;
+      }
+
       .main-content {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -616,6 +725,58 @@
         <p class="subtitle">
           Download videos and audio from any website with parallel processing
         </p>
+
+        <div class="server-info">
+          <div class="server-info-title">📡 Server Access Information</div>
+
+          <div class="server-info-content">
+            <div class="server-urls">
+              <div class="server-url">
+                <span class="url-label">🏠 This Device:</span>
+                <span
+                  class="url-value"
+                  id="localhost-url"
+                  onclick="copyToClipboard('localhost-url')"
+                >
+                  Loading...
+                </span>
+                <span
+                  class="copy-icon"
+                  onclick="copyToClipboard('localhost-url')"
+                  title="Copy"
+                  >📋</span
+                >
+              </div>
+              <div class="server-url">
+                <span class="url-label">📱 Network Devices:</span>
+                <span
+                  class="url-value"
+                  id="network-url"
+                  onclick="copyToClipboard('network-url')"
+                >
+                  Loading...
+                </span>
+                <span
+                  class="copy-icon"
+                  onclick="copyToClipboard('network-url')"
+                  title="Copy"
+                  >📋</span
+                >
+              </div>
+              <div class="network-badge">
+                <span>✨</span>
+                <span>Share this URL with devices on the same WiFi</span>
+              </div>
+            </div>
+
+            <div class="qr-section" id="qr-section" style="display: none">
+              <div class="qr-code">
+                <img id="qr-image" alt="QR Code" />
+              </div>
+              <div class="qr-label">📱 Scan with your phone</div>
+            </div>
+          </div>
+        </div>
       </header>
 
       <div id="dependencies-alert"></div>
@@ -731,6 +892,52 @@
       let currentDownloadType = "video";
       let historyFilter = "all";
       let completedJobs = new Set();
+
+      // Load server info
+      async function loadServerInfo() {
+        try {
+          const response = await fetch("/api/server-info");
+          const data = await response.json();
+
+          if (data.success) {
+            document.getElementById("localhost-url").textContent =
+              data.localhost_url;
+            document.getElementById("network-url").textContent = data.local_url;
+
+            // Display QR code if available
+            if (data.qr_available && data.qr_code) {
+              const qrSection = document.getElementById("qr-section");
+              const qrImage = document.getElementById("qr-image");
+              qrImage.src = data.qr_code;
+              qrSection.style.display = "flex";
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load server info:", error);
+        }
+      }
+
+      // Copy to clipboard
+      function copyToClipboard(elementId) {
+        const element = document.getElementById(elementId);
+        const text = element.textContent;
+
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            showNotification("Copied! 📋", text, "✅");
+          })
+          .catch(() => {
+            // Fallback for older browsers
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textArea);
+            showNotification("Copied! 📋", text, "✅");
+          });
+      }
 
       // Show notification
       function showNotification(title, message, icon = "✅") {
@@ -1127,6 +1334,7 @@
       }
 
       // Initialize
+      loadServerInfo();
       checkDependencies();
       loadHistory();
       setInterval(updateQueueDisplay, 2000);

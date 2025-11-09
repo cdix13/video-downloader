@@ -10,11 +10,23 @@ import subprocess
 import threading
 import time
 import re
+import socket
+import io
+import base64
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 import uuid
+
+# Try to import qrcode, install if not available
+try:
+    import qrcode
+    QRCODE_AVAILABLE = True
+except ImportError:
+    QRCODE_AVAILABLE = False
+    print("⚠️  qrcode library not found. QR codes will be disabled.")
+    print("   Install with: pip install qrcode[pil]")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -48,6 +60,46 @@ def save_history():
     """Save download history to file"""
     with open(HISTORY_FILE, 'w') as f:
         json.dump(download_history, f, indent=2)
+
+def get_local_ip():
+    """Get local IP address"""
+    try:
+        # Create a socket to get the local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
+
+def generate_qr_code(data):
+    """Generate QR code and return as base64 image"""
+    if not QRCODE_AVAILABLE:
+        return None
+    
+    try:
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(data)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        img_base64 = base64.b64encode(buffer.getvalue()).decode()
+        
+        return f"data:image/png;base64,{img_base64}"
+    except Exception as e:
+        print(f"Error generating QR code: {e}")
+        return None
 
 def check_dependencies():
     """Check if required tools are installed"""
@@ -119,6 +171,9 @@ def download_worker(job_id, url, options):
             '--no-check-certificate',
             '--newline',
             '--progress',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--referer', url,
+            '--add-header', 'Accept-Language:en-US,en;q=0.9',
         ]
         
         # Add proxy if specified
@@ -128,6 +183,12 @@ def download_worker(job_id, url, options):
         # Add impersonation for Cloudflare bypass
         if options.get('use_impersonate', True):
             cmd.extend(['--extractor-args', 'generic:impersonate=chrome'])
+        
+        # For sites that require cookies or have video protection
+        # cmd.extend([
+        #     '--geo-bypass',
+        #     '--age-limit', '0',
+        # ])
         
         # Audio or video mode
         if options['audio_only']:
@@ -264,6 +325,26 @@ def api_check_dependencies():
     return jsonify({
         'success': len(missing) == 0,
         'missing': missing
+    })
+
+@app.route('/api/server-info')
+def api_server_info():
+    """Get server information including local IP"""
+    local_ip = get_local_ip()
+    port = request.environ.get('SERVER_PORT', '5001')
+    local_url = f'http://{local_ip}:{port}'
+    
+    # Generate QR code for network URL
+    qr_code = generate_qr_code(local_url) if QRCODE_AVAILABLE else None
+    
+    return jsonify({
+        'success': True,
+        'local_ip': local_ip,
+        'port': port,
+        'local_url': local_url,
+        'localhost_url': f'http://localhost:{port}',
+        'qr_code': qr_code,
+        'qr_available': QRCODE_AVAILABLE
     })
 
 @app.route('/api/download', methods=['POST'])
@@ -436,10 +517,16 @@ def api_get_formats():
             '-J',
             '--no-check-certificate',
             '--extractor-args', 'generic:impersonate=chrome',
+            # '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            # '--referer', url,
+            # '--geo-bypass',
+            # '--age-limit', '0',
             url
         ]
         
         if data.get('proxy'):
+            # cmd.insert(-1, '--proxy')
+            # cmd.insert(-1, data['proxy'])
             cmd.extend(['--proxy', data['proxy']])
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -467,9 +554,14 @@ def api_get_formats():
         else:
             return jsonify({
                 'success': False,
-                'error': 'Could not fetch video information'
+                'error': 'Could not fetch video information. The site may require special handling or authentication.'
             }), 400
             
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'error': 'Request timed out. Try using a proxy or the site may be blocked.'
+        }), 500
     except Exception as e:
         return jsonify({
             'success': False,
@@ -478,13 +570,27 @@ def api_get_formats():
 
 if __name__ == '__main__':
     load_history()
+    local_ip = get_local_ip()
+    port = 5001
+    
     print("=" * 80)
     print("🎬 Universal Video Downloader - Web UI")
     print("=" * 80)
-    print("\n🌐 Server starting at: http://localhost:5001")
-    print("📁 Downloads folder:", DOWNLOAD_DIR)
-    print("🎥 Videos folder:", VIDEO_DIR)
-    print("🎵 Audio folder:", AUDIO_DIR)
-    print("\n💡 Press Ctrl+C to stop the server\n")
+    print("\n📡 Server Information:")
+    print(f"   • Local Access:   http://localhost:{port}")
+    print(f"   • Network Access: http://{local_ip}:{port}")
+    print("\n📱 Access from other devices:")
+    print(f"   Open browser and go to: http://{local_ip}:{port}")
+    if QRCODE_AVAILABLE:
+        print(f"   OR scan the QR code shown in the web interface")
+    else:
+        print(f"\n💡 Install qrcode for QR code feature:")
+        print(f"   pip install qrcode[pil]")
+    print("\n📁 Download Locations:")
+    print(f"   • Videos: {VIDEO_DIR}")
+    print(f"   • Audio:  {AUDIO_DIR}")
+    print("\n💡 Press Ctrl+C to stop the server")
+    print("=" * 80)
+    print()
     
-    app.run(debug=True, host='0.0.0.0', port=5001, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=port, threaded=True)
