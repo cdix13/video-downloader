@@ -206,6 +206,8 @@ def download_worker(job_id, url, options):
         if process.returncode == 0 and download_queue[job_id]['status'] != 'cancelled':
             download_queue[job_id]['status'] = 'completed'
             download_queue[job_id]['progress'] = 100
+            download_queue[job_id]['speed'] = 'Complete'
+            download_queue[job_id]['eta'] = '00:00'
             
             # Find the downloaded file
             if not filename:
@@ -238,14 +240,7 @@ def download_worker(job_id, url, options):
                     download_queue[job_id]['file_info'] = history_entry
             
             # Auto-remove completed download after 3 seconds
-            def remove_completed():
-                time.sleep(1)
-                if job_id in download_queue and download_queue[job_id]['status'] == 'completed':
-                    del download_queue[job_id]
-            
-            removal_thread = threading.Thread(target=remove_completed)
-            removal_thread.daemon = True
-            removal_thread.start()
+            threading.Timer(1.0, lambda: download_queue.pop(job_id, None)).start()
             
         elif download_queue[job_id]['status'] != 'cancelled':
             download_queue[job_id]['status'] = 'failed'
