@@ -155,25 +155,52 @@ def parse_progress_line(line):
     if percent_match:
         info['progress'] = float(percent_match.group(1))
     
-    # Extract download speed
-    speed_match = re.search(r'at\s+([\d.]+\s*[KMG]iB/s)', line)
+    # Extract download speed - multiple formats
+    # Format: "at 2.5MiB/s" or "2.5MiB/s" or "at 500KiB/s"
+    speed_match = re.search(r'(?:at\s+)?([\d.]+\s*[KMG]i?B/s)', line, re.IGNORECASE)
     if speed_match:
         info['speed'] = speed_match.group(1)
     
     # Extract ETA
-    eta_match = re.search(r'ETA\s+([\d:]+)', line)
+    # Format: "ETA 00:05" or "in 00:05"
+    eta_match = re.search(r'(?:ETA|in)\s+([\d:]+)', line)
     if eta_match:
         info['eta'] = eta_match.group(1)
     
-    # Extract file size
-    size_match = re.search(r'of\s+([\d.]+\s*[KMG]iB)', line)
+    # Extract total file size - multiple formats
+    # Format: "of 150.5MiB" or "~150.5MiB" or "/150.5MiB"
+    size_match = re.search(r'(?:of|~|/)\s*([\d.]+\s*[KMG]i?B)', line, re.IGNORECASE)
     if size_match:
         info['total_size'] = size_match.group(1)
     
+    # Alternative: Extract from format like "[download] 45.2MiB of 150.5MiB"
+    if 'total_size' not in info:
+        full_size_match = re.search(r'([\d.]+[KMG]i?B)\s+of\s+([\d.]+[KMG]i?B)', line, re.IGNORECASE)
+        if full_size_match:
+            info['downloaded'] = full_size_match.group(1)
+            info['total_size'] = full_size_match.group(2)
+    
     # Extract downloaded size
-    downloaded_match = re.search(r'\[download\]\s+([\d.]+\s*[KMG]iB)', line)
-    if downloaded_match:
-        info['downloaded'] = downloaded_match.group(1)
+    # Format: "[download] 45.2MiB" or "45.2MiB of"
+    if 'downloaded' not in info:
+        downloaded_match = re.search(r'\[download\]\s+([\d.]+\s*[KMG]i?B)', line, re.IGNORECASE)
+        if downloaded_match:
+            info['downloaded'] = downloaded_match.group(1)
+    
+    # Alternative: Just the size before "of"
+    if 'downloaded' not in info:
+        downloaded_match = re.search(r'([\d.]+[KMG]i?B)\s+of\s+', line, re.IGNORECASE)
+        if downloaded_match:
+            info['downloaded'] = downloaded_match.group(1)
+    
+    # Extract from progress line format: "[download]  45.2% of 150.5MiB at 2.5MiB/s ETA 00:30"
+    comprehensive_match = re.search(
+        r'\[download\]\s+[\d.]+%\s+(?:of\s+)?([\d.]+[KMG]i?B)',
+        line,
+        re.IGNORECASE
+    )
+    if comprehensive_match and 'total_size' not in info:
+        info['total_size'] = comprehensive_match.group(1)
     
     return info
 
@@ -182,9 +209,9 @@ def download_worker(job_id, url, options):
     try:
         download_queue[job_id]['status'] = 'downloading'
         download_queue[job_id]['progress'] = 0
-        download_queue[job_id]['speed'] = 'N/A'
-        download_queue[job_id]['eta'] = 'N/A'
-        download_queue[job_id]['total_size'] = 'N/A'
+        download_queue[job_id]['speed'] = 'Calculating...'
+        download_queue[job_id]['eta'] = 'Calculating...'
+        download_queue[job_id]['total_size'] = 'Calculating...'
         download_queue[job_id]['downloaded'] = '0 B'
         
         # Determine output directory
@@ -254,7 +281,10 @@ def download_worker(job_id, url, options):
         download_processes[job_id] = process
         
         filename = None
+        line_count = 0
         for line in process.stdout:
+            line_count += 1
+            
             # Check if cancelled
             if download_queue[job_id]['status'] == 'cancelled':
                 process.terminate()
@@ -274,6 +304,11 @@ def download_worker(job_id, url, options):
                     download_queue[job_id]['total_size'] = progress_info['total_size']
                 if 'downloaded' in progress_info:
                     download_queue[job_id]['downloaded'] = progress_info['downloaded']
+            
+            # Update status text for initial lines
+            if line_count < 5 and '[download]' not in line:
+                if 'Downloading' in line or 'Extracting' in line:
+                    download_queue[job_id]['speed'] = 'Fetching info...'
             
             # Get filename
             if '[download] Destination:' in line:
@@ -309,6 +344,15 @@ def download_worker(job_id, url, options):
                     file_path = output_dir / file_path.name
                 
                 if file_path.exists():
+                    # Update total size with actual file size
+                    actual_size = file_path.stat().st_size
+                    if actual_size > 1024 * 1024:
+                        download_queue[job_id]['total_size'] = f"{actual_size / 1024 / 1024:.2f} MiB"
+                    elif actual_size > 1024:
+                        download_queue[job_id]['total_size'] = f"{actual_size / 1024:.2f} KiB"
+                    else:
+                        download_queue[job_id]['total_size'] = f"{actual_size} B"
+                    
                     # Add to history
                     history_entry = {
                         'id': str(uuid.uuid4()),
@@ -316,7 +360,7 @@ def download_worker(job_id, url, options):
                         'filename': file_path.name,
                         'filepath': str(file_path.relative_to(DOWNLOAD_DIR)),
                         'type': 'audio' if options['audio_only'] else 'video',
-                        'size': file_path.stat().st_size,
+                        'size': actual_size,
                         'timestamp': datetime.now().isoformat(),
                         'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }
