@@ -1,0 +1,4 @@
+flask>=3.0.0
+qrcode[pil]>=7.4.2
+yt-dlp>=2024.0.0
+curl-cffi>=0.6.0

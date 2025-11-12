@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./download_history.json:/app/download_history.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Jakarta
+      - HOST_IP=${HOST_IP:-192.168.1.100}
+    # Add capabilities for Tor
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - video-downloader-network
+
+networks:
+  video-downloader-network:
+    driver: bridge

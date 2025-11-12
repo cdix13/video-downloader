@@ -1,0 +1,342 @@
+# 🐳 Docker Setup Guide - Fix Local IP Detection
+
+## Problem
+When running in Docker, the app detects the Docker container's internal IP (172.17.x.x) instead of your actual local network IP.
+
+## Solutions
+
+### ✅ Solution 1: Pass Host IP as Environment Variable (Recommended)
+
+#### Step 1: Find Your Local IP
+
+**macOS:**
+```bash
+ipconfig getifaddr en0
+# or if using WiFi
+ipconfig getifaddr en1
+```
+
+**Linux:**
+```bash
+hostname -I | awk '{print $1}'
+# or
+ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}'
+```
+
+**Windows (Command Prompt):**
+```cmd
+ipconfig
+# Look for "IPv4 Address" under your active network adapter
+```
+
+**Windows (PowerShell):**
+```powershell
+(Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -like "*Ethernet*" -or $_.InterfaceAlias -like "*Wi-Fi*"} | Select-Object -First 1).IPAddress
+```
+
+#### Step 2: Run Docker with Your IP
+
+Replace `192.168.1.100` with your actual IP:
+
+```bash
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -e HOST_IP=192.168.1.100 \
+  -v $(pwd)/downloads:/app/downloads \
+  --restart unless-stopped \
+  video-downloader
+```
+
+#### Step 3: Update docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./download_history.json:/app/download_history.json
+    restart: unless-stopped
+    environment:
+      - HOST_IP=192.168.1.100  # ⚠️ CHANGE THIS TO YOUR IP!
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
+---
+
+### ✅ Solution 2: Auto-Detect Script (Best)
+
+#### Create: `docker-start.sh`
+
+```bash
+#!/bin/bash
+
+# Auto-detect host IP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    HOST_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
+    HOST_IP=$(hostname -I | awk '{print $1}')
+fi
+
+echo "🌐 Detected Host IP: $HOST_IP"
+
+# Run docker with detected IP
+export HOST_IP=$HOST_IP
+docker-compose up -d
+
+echo "✅ Server started at http://$HOST_IP:5001"
+```
+
+Make it executable and run:
+```bash
+chmod +x docker-start.sh
+./docker-start.sh
+```
+
+---
+
+### ✅ Solution 3: Host Network Mode (Linux Only)
+
+Use the host's network directly (bypasses Docker networking):
+
+```bash
+docker run -d \
+  --name video-downloader \
+  --network host \
+  -v $(pwd)/downloads:/app/downloads \
+  --restart unless-stopped \
+  video-downloader
+```
+
+**Or in docker-compose.yml:**
+```yaml
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    network_mode: "host"  # Use host network
+    volumes:
+      - ./downloads:/app/downloads
+    restart: unless-stopped
+```
+
+⚠️ **Note:** Host network mode doesn't work on macOS/Windows Docker Desktop.
+
+---
+
+### ✅ Solution 4: .env File (Clean Method)
+
+#### Create: `.env` file
+
+```bash
+HOST_IP=192.168.1.100
+```
+
+#### Update: `docker-compose.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+    restart: unless-stopped
+    environment:
+      - HOST_IP=${HOST_IP}  # Reads from .env file
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
+---
+
+## 🚀 Quick Start (Copy-Paste Ready)
+
+### For macOS:
+```bash
+# 1. Detect IP
+HOST_IP=$(ipconfig getifaddr en0)
+echo "Your IP: $HOST_IP"
+
+# 2. Run Docker
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -e HOST_IP=$HOST_IP \
+  -v $(pwd)/downloads:/app/downloads \
+  --restart unless-stopped \
+  video-downloader
+
+# 3. Access
+echo "Open: http://$HOST_IP:5001"
+```
+
+### For Linux:
+```bash
+# 1. Detect IP
+HOST_IP=$(hostname -I | awk '{print $1}')
+echo "Your IP: $HOST_IP"
+
+# 2. Run Docker (with host network - easiest!)
+docker run -d \
+  --name video-downloader \
+  --network host \
+  -v $(pwd)/downloads:/app/downloads \
+  --restart unless-stopped \
+  video-downloader
+
+# 3. Access
+echo "Open: http://$HOST_IP:5001"
+```
+
+### For Windows (PowerShell):
+```powershell
+# 1. Detect IP
+$HOST_IP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -like "*Wi-Fi*"} | Select-Object -First 1).IPAddress
+Write-Host "Your IP: $HOST_IP"
+
+# 2. Run Docker
+docker run -d `
+  --name video-downloader `
+  -p 5001:5001 `
+  -e HOST_IP=$HOST_IP `
+  -v ${PWD}/downloads:/app/downloads `
+  --restart unless-stopped `
+  video-downloader
+
+# 3. Access
+Write-Host "Open: http://${HOST_IP}:5001"
+```
+
+---
+
+## 🔍 Verify It's Working
+
+After starting Docker, check the logs:
+```bash
+docker logs video-downloader
+```
+
+You should see:
+```
+📡 Server Information:
+   • Local Access:   http://localhost:5001
+   • Network Access: http://192.168.1.100:5001  ✅ (Your real IP!)
+```
+
+---
+
+## 🛠️ Troubleshooting
+
+### IP Still Shows 172.17.x.x?
+
+1. **Check environment variable:**
+   ```bash
+   docker exec video-downloader env | grep HOST_IP
+   ```
+
+2. **Restart container with correct IP:**
+   ```bash
+   docker stop video-downloader
+   docker rm video-downloader
+   # Then run again with -e HOST_IP=YOUR_IP
+   ```
+
+3. **Use host network mode (Linux):**
+   ```bash
+   docker run --network host ...
+   ```
+
+### Can't Access from Other Devices?
+
+1. **Check firewall:**
+   - macOS: System Preferences → Security & Privacy → Firewall
+   - Linux: `sudo ufw allow 5001`
+   - Windows: Allow port 5001 in Windows Firewall
+
+2. **Verify IP is correct:**
+   ```bash
+   # Should match your router's IP range
+   # Usually: 192.168.x.x or 10.0.x.x
+   ```
+
+3. **Test connectivity:**
+   ```bash
+   # From another device
+   ping YOUR_IP
+   curl http://YOUR_IP:5001
+   ```
+
+---
+
+## 📱 Best Practice for Each OS
+
+| OS | Recommended Method |
+|----|-------------------|
+| **Linux** | Host network mode (`--network host`) |
+| **macOS** | Auto-detect script with `-e HOST_IP` |
+| **Windows** | Manual IP in docker-compose.yml |
+
+---
+
+## 🎯 Final Checklist
+
+- [ ] Found your local IP address
+- [ ] Passed IP to Docker using `-e HOST_IP=YOUR_IP`
+- [ ] Container is running: `docker ps`
+- [ ] Logs show correct IP: `docker logs video-downloader`
+- [ ] Web UI displays correct IP
+- [ ] Can access from phone on same WiFi
+- [ ] QR code works for easy sharing
+
+---
+
+## 💡 Pro Tip: Dynamic IP Script
+
+If your IP changes (DHCP), create this startup script:
+
+```bash
+#!/bin/bash
+# auto-restart-docker.sh
+
+# Stop old container
+docker stop video-downloader 2>/dev/null
+docker rm video-downloader 2>/dev/null
+
+# Get current IP
+HOST_IP=$(hostname -I | awk '{print $1}')
+
+# Start with new IP
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -e HOST_IP=$HOST_IP \
+  -v $(pwd)/downloads:/app/downloads \
+  --restart unless-stopped \
+  video-downloader
+
+echo "✅ Started with IP: $HOST_IP"
+```
+
+Run this script whenever your IP changes!

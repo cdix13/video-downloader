@@ -9,6 +9,7 @@
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
       }
 
       :root {
@@ -34,7 +35,14 @@
         );
         color: var(--text-primary);
         min-height: 100vh;
-        padding: 20px;
+        padding: 10px;
+        overflow-x: hidden;
+      }
+
+      @media (min-width: 768px) {
+        body {
+          padding: 20px;
+        }
       }
 
       .container {
@@ -44,16 +52,24 @@
 
       header {
         text-align: center;
-        margin-bottom: 40px;
-        padding: 30px;
+        margin-bottom: 20px;
+        padding: 20px;
         background: var(--bg-tertiary);
-        border-radius: 20px;
+        border-radius: 15px;
         border: 1px solid var(--border);
         box-shadow: 0 10px 40px rgba(0, 212, 255, 0.1);
       }
 
+      @media (min-width: 768px) {
+        header {
+          margin-bottom: 40px;
+          padding: 30px;
+          border-radius: 20px;
+        }
+      }
+
       h1 {
-        font-size: 2.5rem;
+        font-size: 1.8rem;
         background: linear-gradient(
           135deg,
           var(--accent-primary),
@@ -61,34 +77,71 @@
         );
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
+      }
+
+      @media (min-width: 768px) {
+        h1 {
+          font-size: 2.5rem;
+          margin-bottom: 10px;
+        }
       }
 
       .subtitle {
         color: var(--text-secondary);
-        font-size: 1.1rem;
+        font-size: 0.9rem;
+        padding: 0 10px;
+      }
+
+      @media (min-width: 768px) {
+        .subtitle {
+          font-size: 1.1rem;
+          padding: 0;
+        }
       }
 
       .server-info {
-        margin-top: 20px;
-        padding: 15px;
+        margin-top: 15px;
+        padding: 12px;
         background: var(--bg-secondary);
         border-radius: 10px;
         border: 1px solid var(--border);
         display: inline-block;
+        max-width: 100%;
+      }
+
+      @media (min-width: 768px) {
+        .server-info {
+          margin-top: 20px;
+          padding: 15px;
+        }
       }
 
       .server-info-content {
         display: flex;
-        gap: 25px;
+        flex-direction: column;
+        gap: 15px;
         align-items: center;
-        flex-wrap: wrap;
-        justify-content: center;
+      }
+
+      @media (min-width: 768px) {
+        .server-info-content {
+          flex-direction: row;
+          gap: 25px;
+        }
       }
 
       .server-urls {
         flex: 1;
-        min-width: 300px;
+        min-width: 0;
+        width: 100%;
+      }
+
+      @media (min-width: 768px) {
+        .server-urls {
+          min-width: 300px;
+          width: auto;
+        }
       }
 
       .qr-section {
@@ -99,16 +152,29 @@
       }
 
       .qr-code {
-        padding: 15px;
+        padding: 10px;
         background: white;
         border-radius: 10px;
         box-shadow: 0 5px 20px rgba(0, 212, 255, 0.2);
       }
 
+      @media (min-width: 768px) {
+        .qr-code {
+          padding: 15px;
+        }
+      }
+
       .qr-code img {
         display: block;
-        width: 180px;
-        height: 180px;
+        width: 140px;
+        height: 140px;
+      }
+
+      @media (min-width: 768px) {
+        .qr-code img {
+          width: 180px;
+          height: 180px;
+        }
       }
 
       .qr-label {
@@ -180,35 +246,57 @@
 
       .main-content {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin-bottom: 20px;
+        grid-template-columns: 1fr;
+        gap: 15px;
+        margin-bottom: 15px;
       }
 
-      @media (max-width: 1024px) {
+      @media (min-width: 1024px) {
         .main-content {
-          grid-template-columns: 1fr;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 20px;
         }
       }
 
       .card {
         background: var(--bg-tertiary);
-        border-radius: 15px;
-        padding: 25px;
+        border-radius: 12px;
+        padding: 15px;
         border: 1px solid var(--border);
         box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
       }
 
+      @media (min-width: 768px) {
+        .card {
+          border-radius: 15px;
+          padding: 25px;
+        }
+      }
+
       .card-title {
-        font-size: 1.5rem;
-        margin-bottom: 20px;
+        font-size: 1.3rem;
+        margin-bottom: 15px;
         display: flex;
         align-items: center;
         gap: 10px;
       }
 
+      @media (min-width: 768px) {
+        .card-title {
+          font-size: 1.5rem;
+          margin-bottom: 20px;
+        }
+      }
+
       .icon {
-        font-size: 1.8rem;
+        font-size: 1.5rem;
+      }
+
+      @media (min-width: 768px) {
+        .icon {
+          font-size: 1.8rem;
+        }
       }
 
       .form-group {
@@ -567,17 +655,34 @@
 
       .tabs {
         display: flex;
-        gap: 10px;
-        margin-bottom: 20px;
+        gap: 6px;
+        margin-bottom: 15px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      @media (min-width: 768px) {
+        .tabs {
+          gap: 10px;
+          margin-bottom: 20px;
+        }
       }
 
       .tab {
-        padding: 10px 20px;
+        padding: 8px 15px;
         background: var(--bg-secondary);
         border: 1px solid var(--border);
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.3s;
+        white-space: nowrap;
+        touch-action: manipulation;
+      }
+
+      @media (min-width: 768px) {
+        .tab {
+          padding: 10px 20px;
+        }
       }
 
       .tab.active {
@@ -715,6 +820,151 @@
         word-break: break-word;
         overflow-wrap: break-word;
         line-height: 1.3;
+      }
+
+      /* Video Player Modal */
+      .video-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .video-modal.active {
+        display: flex;
+      }
+
+      .video-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .video-player {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      @media (min-width: 768px) {
+        .video-player {
+          max-width: 90vw;
+          max-height: 90vh;
+        }
+      }
+
+      .video-controls {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+        padding: 40px 15px 15px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+
+      .video-modal.active .video-controls.visible,
+      .video-controls:hover {
+        opacity: 1;
+      }
+
+      .video-progress {
+        width: 100%;
+        height: 5px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        position: relative;
+      }
+
+      .video-progress-bar {
+        height: 100%;
+        background: var(--accent-primary);
+        border-radius: 10px;
+        width: 0%;
+        transition: width 0.1s;
+      }
+
+      .video-buttons {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .video-btn {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 5px;
+        display: flex;
+        align-items: center;
+        touch-action: manipulation;
+      }
+
+      .video-time {
+        color: white;
+        font-size: 0.9rem;
+        margin-left: auto;
+      }
+
+      .close-video {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        font-size: 1.8rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        touch-action: manipulation;
+      }
+
+      @media (min-width: 768px) {
+        .close-video {
+          top: 20px;
+          right: 20px;
+          width: 50px;
+          height: 50px;
+          font-size: 2rem;
+        }
+      }
+
+      .gesture-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 3rem;
+        color: white;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      .gesture-overlay.show {
+        opacity: 1;
       }
     </style>
   </head>
@@ -887,11 +1137,197 @@
       </div>
     </div>
 
+    <!-- Video Player Modal -->
+    <div class="video-modal" id="video-modal">
+      <button class="close-video" onclick="closeVideoPlayer()">×</button>
+      <div class="video-container" id="video-container">
+        <video class="video-player" id="video-player" controls></video>
+        <div class="gesture-overlay" id="gesture-overlay"></div>
+        <div class="video-controls" id="video-controls">
+          <div class="video-progress" id="video-progress">
+            <div class="video-progress-bar" id="video-progress-bar"></div>
+          </div>
+          <div class="video-buttons">
+            <button
+              class="video-btn"
+              id="play-pause-btn"
+              onclick="togglePlayPause()"
+            >
+              ▶️
+            </button>
+            <span class="video-time" id="video-time">0:00 / 0:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script>
       let selectedFormat = null;
       let currentDownloadType = "video";
       let historyFilter = "all";
       let completedJobs = new Set();
+
+      // Video player variables
+      let videoPlayer = null;
+      let videoControls = null;
+      let controlsTimeout = null;
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchStartTime = 0;
+
+      // Initialize video player
+      function initVideoPlayer() {
+        videoPlayer = document.getElementById("video-player");
+        videoControls = document.getElementById("video-controls");
+        const videoContainer = document.getElementById("video-container");
+        const videoProgress = document.getElementById("video-progress");
+
+        // Show controls on touch/mouse move
+        videoContainer.addEventListener("mousemove", showControls);
+        videoContainer.addEventListener("touchstart", showControls);
+
+        // Update progress bar
+        videoPlayer.addEventListener("timeupdate", updateProgress);
+
+        // Click progress bar to seek
+        videoProgress.addEventListener("click", seekVideo);
+
+        // Touch gestures for mobile
+        videoContainer.addEventListener("touchstart", handleTouchStart);
+        videoContainer.addEventListener("touchend", handleTouchEnd);
+
+        // Double tap to play/pause
+        let lastTap = 0;
+        videoContainer.addEventListener("touchend", function (e) {
+          const currentTime = new Date().getTime();
+          const tapLength = currentTime - lastTap;
+          if (tapLength < 300 && tapLength > 0) {
+            togglePlayPause();
+            e.preventDefault();
+          }
+          lastTap = currentTime;
+        });
+      }
+
+      function showControls() {
+        videoControls.classList.add("visible");
+        clearTimeout(controlsTimeout);
+        controlsTimeout = setTimeout(() => {
+          if (!videoPlayer.paused) {
+            videoControls.classList.remove("visible");
+          }
+        }, 3000);
+      }
+
+      function handleTouchStart(e) {
+        if (e.touches.length === 1) {
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          touchStartTime = videoPlayer.currentTime;
+        }
+      }
+
+      function handleTouchEnd(e) {
+        if (e.changedTouches.length === 1) {
+          const touchEndX = e.changedTouches[0].clientX;
+          const touchEndY = e.changedTouches[0].clientY;
+          const diffX = touchEndX - touchStartX;
+          const diffY = touchEndY - touchStartY;
+
+          // Horizontal swipe for seeking
+          if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+            const seekAmount = diffX / 10; // 10px = 1 second
+            videoPlayer.currentTime = Math.max(
+              0,
+              Math.min(videoPlayer.duration, touchStartTime + seekAmount)
+            );
+
+            const gestureOverlay = document.getElementById("gesture-overlay");
+            gestureOverlay.textContent = diffX > 0 ? "⏩" : "⏪";
+            gestureOverlay.classList.add("show");
+            setTimeout(() => gestureOverlay.classList.remove("show"), 500);
+          }
+
+          // Vertical swipe for volume (left side: brightness simulation via opacity)
+          if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 50) {
+            if (touchStartX < window.innerWidth / 2) {
+              // Left side - adjust video opacity (brightness simulation)
+              const newOpacity = Math.max(
+                0.3,
+                Math.min(
+                  1,
+                  videoPlayer.style.opacity
+                    ? parseFloat(videoPlayer.style.opacity) - diffY / 500
+                    : 1 - diffY / 500
+                )
+              );
+              videoPlayer.style.opacity = newOpacity;
+
+              const gestureOverlay = document.getElementById("gesture-overlay");
+              gestureOverlay.textContent = diffY < 0 ? "🔆" : "🔅";
+              gestureOverlay.classList.add("show");
+              setTimeout(() => gestureOverlay.classList.remove("show"), 500);
+            } else {
+              // Right side - adjust volume
+              const newVolume = Math.max(
+                0,
+                Math.min(1, videoPlayer.volume - diffY / 500)
+              );
+              videoPlayer.volume = newVolume;
+
+              const gestureOverlay = document.getElementById("gesture-overlay");
+              gestureOverlay.textContent = diffY < 0 ? "🔊" : "🔉";
+              gestureOverlay.classList.add("show");
+              setTimeout(() => gestureOverlay.classList.remove("show"), 500);
+            }
+          }
+        }
+      }
+
+      function updateProgress() {
+        const progressBar = document.getElementById("video-progress-bar");
+        const percentage =
+          (videoPlayer.currentTime / videoPlayer.duration) * 100;
+        progressBar.style.width = percentage + "%";
+
+        const currentTime = formatTime(videoPlayer.currentTime);
+        const duration = formatTime(videoPlayer.duration);
+        document.getElementById(
+          "video-time"
+        ).textContent = `${currentTime} / ${duration}`;
+      }
+
+      function seekVideo(e) {
+        const progressBar = document.getElementById("video-progress");
+        const rect = progressBar.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        videoPlayer.currentTime = pos * videoPlayer.duration;
+      }
+
+      function togglePlayPause() {
+        if (videoPlayer.paused) {
+          videoPlayer.play();
+          document.getElementById("play-pause-btn").textContent = "⏸️";
+        } else {
+          videoPlayer.pause();
+          document.getElementById("play-pause-btn").textContent = "▶️";
+        }
+      }
+
+      function formatTime(seconds) {
+        if (isNaN(seconds)) return "0:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+      }
+
+      function closeVideoPlayer() {
+        const modal = document.getElementById("video-modal");
+        modal.classList.remove("active");
+        videoPlayer.pause();
+        videoPlayer.src = "";
+        videoPlayer.style.opacity = "1";
+      }
 
       // Load server info
       async function loadServerInfo() {
@@ -900,20 +1336,75 @@
           const data = await response.json();
 
           if (data.success) {
+            let localUrl = data.local_url;
+
+            // Additional check: if server returned Docker IP, use browser's location
+            if (localUrl.includes("172.17.") || localUrl.includes("172.18.")) {
+              // Get IP from browser's current location
+              const hostname = window.location.hostname;
+              if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+                localUrl = `http://${hostname}:${data.port}`;
+              }
+            }
+
             document.getElementById("localhost-url").textContent =
               data.localhost_url;
-            document.getElementById("network-url").textContent = data.local_url;
+            document.getElementById("network-url").textContent = localUrl;
 
             // Display QR code if available
             if (data.qr_available && data.qr_code) {
+              // Regenerate QR code with correct URL if needed
               const qrSection = document.getElementById("qr-section");
               const qrImage = document.getElementById("qr-image");
-              qrImage.src = data.qr_code;
+
+              // If QR code contains Docker IP, regenerate client-side
+              if (
+                data.qr_code &&
+                (localUrl.includes("172.17.") || localUrl.includes("172.18."))
+              ) {
+                // Use a QR code API to generate on client side
+                qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  localUrl
+                )}`;
+              } else {
+                qrImage.src = data.qr_code;
+              }
+
+              qrSection.style.display = "flex";
+            } else {
+              // If no QR from server, generate client-side
+              const qrSection = document.getElementById("qr-section");
+              const qrImage = document.getElementById("qr-image");
+              const hostname = window.location.hostname;
+              const displayUrl =
+                hostname !== "localhost" && hostname !== "127.0.0.1"
+                  ? `http://${hostname}:${data.port}`
+                  : localUrl;
+
+              qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                displayUrl
+              )}`;
               qrSection.style.display = "flex";
             }
           }
         } catch (error) {
           console.error("Failed to load server info:", error);
+          // Fallback: use browser's current URL
+          const hostname = window.location.hostname;
+          const port = window.location.port || "5001";
+          document.getElementById("localhost-url").textContent =
+            "http://localhost:" + port;
+          document.getElementById(
+            "network-url"
+          ).textContent = `http://${hostname}:${port}`;
+
+          // Generate QR code using external API
+          const qrSection = document.getElementById("qr-section");
+          const qrImage = document.getElementById("qr-image");
+          qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+            "http://" + hostname + ":" + port
+          )}`;
+          qrSection.style.display = "flex";
         }
       }
 
@@ -1317,7 +1808,28 @@
 
       // Play file in new tab
       function playFile(filepath) {
-        window.open(`/api/file/${filepath}`, "_blank");
+        const fileUrl = `/api/file/${filepath}`;
+        const extension = filepath.split(".").pop().toLowerCase();
+
+        // Open video/audio in modal player
+        if (["mp4", "webm", "ogg", "mov", "avi", "mkv"].includes(extension)) {
+          const modal = document.getElementById("video-modal");
+          videoPlayer.src = fileUrl;
+          videoPlayer.style.opacity = "1";
+          modal.classList.add("active");
+          videoPlayer.play();
+          showControls();
+        } else if (["mp3", "wav", "aac", "m4a"].includes(extension)) {
+          const modal = document.getElementById("video-modal");
+          videoPlayer.src = fileUrl;
+          videoPlayer.style.opacity = "1";
+          modal.classList.add("active");
+          videoPlayer.play();
+          showControls();
+        } else {
+          // Open other files in new tab
+          window.open(fileUrl, "_blank");
+        }
       }
 
       // Download file
@@ -1334,6 +1846,7 @@
       }
 
       // Initialize
+      initVideoPlayer();
       loadServerInfo();
       checkDependencies();
       loadHistory();

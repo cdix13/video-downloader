@@ -62,15 +62,40 @@ def save_history():
         json.dump(download_history, f, indent=2)
 
 def get_local_ip():
-    """Get local IP address"""
+    """Get local IP address - works correctly in Docker and native"""
     try:
-        # Create a socket to get the local IP
+        # Check if running in Docker and HOST_IP is provided
+        host_ip = os.environ.get('HOST_IP')
+        if host_ip and host_ip != '':
+            # Validate it's a proper IP
+            parts = host_ip.split('.')
+            if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+                return host_ip
+        
+        # Native execution - use original simple method
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        return local_ip
-    except Exception:
+        s.settimeout(2)
+        try:
+            # Connect to external server to get local IP
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            
+            # Filter out Docker internal IPs
+            if local_ip.startswith('172.17.') or local_ip.startswith('172.18.'):
+                # Try alternative method for Docker
+                hostname = socket.gethostname()
+                ip_list = socket.gethostbyname_ex(hostname)[2]
+                for ip in ip_list:
+                    if not ip.startswith('127.') and not ip.startswith('172.17.') and not ip.startswith('172.18.'):
+                        return ip
+                return "127.0.0.1"
+            
+            return local_ip
+        finally:
+            s.close()
+            
+    except Exception as e:
+        print(f"Warning: Could not detect local IP: {e}")
         return "127.0.0.1"
 
 def generate_qr_code(data):
@@ -300,7 +325,7 @@ def download_worker(job_id, url, options):
                     
                     download_queue[job_id]['file_info'] = history_entry
             
-            # Auto-remove completed download after 3 seconds
+            # Auto-remove completed download after 1 second
             threading.Timer(1.0, lambda: download_queue.pop(job_id, None)).start()
             
         elif download_queue[job_id]['status'] != 'cancelled':
@@ -517,19 +542,18 @@ def api_get_formats():
             '-J',
             '--no-check-certificate',
             '--extractor-args', 'generic:impersonate=chrome',
-            # '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            # '--referer', url,
-            # '--geo-bypass',
-            # '--age-limit', '0',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--referer', url,
+            '--geo-bypass',
+            '--age-limit', '0',
             url
         ]
         
         if data.get('proxy'):
-            # cmd.insert(-1, '--proxy')
-            # cmd.insert(-1, data['proxy'])
-            cmd.extend(['--proxy', data['proxy']])
+            cmd.insert(-1, '--proxy')
+            cmd.insert(-1, data['proxy'])
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         
         if result.returncode == 0:
             info = json.loads(result.stdout)
@@ -589,8 +613,12 @@ if __name__ == '__main__':
     print("\n📁 Download Locations:")
     print(f"   • Videos: {VIDEO_DIR}")
     print(f"   • Audio:  {AUDIO_DIR}")
+    print("\n⚠️  Keep Server Running (Prevent Sleep):")
+    print("   macOS:   Run 'caffeinate -i python app.py' instead")
+    print("   Windows: Disable sleep in Power Settings")
+    print("   Linux:   Run 'systemd-inhibit python app.py' instead")
     print("\n💡 Press Ctrl+C to stop the server")
     print("=" * 80)
     print()
     
-    app.run(debug=True, host='0.0.0.0', port=port, threaded=True)
+    app.run(debug=False, host='0.0.0.0', port=port, threaded=True)

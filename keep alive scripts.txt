@@ -1,0 +1,869 @@
+#!/bin/bash
+# ============================================================================
+# Video Downloader - Keep Alive Scripts
+# Scripts to prevent system sleep while server is running
+# ============================================================================
+
+# ============================================================================
+# macOS - run_server_mac.sh
+# ============================================================================
+# Save this as: run_server_mac.sh
+# Usage: chmod +x run_server_mac.sh && ./run_server_mac.sh
+
+#!/bin/bash
+echo "🎬 Starting Video Downloader Server (macOS)"
+echo "🛡️  Preventing system sleep with caffeinate..."
+echo ""
+
+# Prevent sleep while running
+caffeinate -i python3 app.py
+
+
+# ============================================================================
+# Linux - run_server_linux.sh
+# ============================================================================
+# Save this as: run_server_linux.sh
+# Usage: chmod +x run_server_linux.sh && ./run_server_linux.sh
+
+#!/bin/bash
+echo "🎬 Starting Video Downloader Server (Linux)"
+echo "🛡️  Preventing system sleep with systemd-inhibit..."
+echo ""
+
+# Check if systemd-inhibit is available
+if command -v systemd-inhibit &> /dev/null; then
+    systemd-inhibit --what=idle:sleep --who="Video Downloader" --why="Server is running" python3 app.py
+else
+    echo "⚠️  systemd-inhibit not found, running without sleep prevention"
+    python3 app.py
+fi
+
+
+# ============================================================================
+# Windows - run_server_windows.bat
+# ============================================================================
+# Save this as: run_server_windows.bat
+# Usage: Double-click the file or run in Command Prompt
+
+@echo off
+echo ============================================================================
+echo 🎬 Video Downloader Server - Windows
+echo ============================================================================
+echo.
+echo 🛡️  Preventing system sleep...
+echo.
+
+REM Prevent sleep using powercfg
+powercfg /change standby-timeout-ac 0
+powercfg /change monitor-timeout-ac 0
+
+echo ⚠️  Sleep mode disabled. Will restore on exit.
+echo.
+echo 🚀 Starting server...
+echo.
+
+REM Start Python server
+python app.py
+
+REM Restore power settings on exit
+echo.
+echo 🔄 Restoring power settings...
+powercfg /change standby-timeout-ac 30
+powercfg /change monitor-timeout-ac 10
+
+echo.
+echo ✅ Server stopped. Power settings restored.
+pause
+
+
+# ============================================================================
+# Windows PowerShell - run_server_windows.ps1
+# ============================================================================
+# Save this as: run_server_windows.ps1
+# Usage: Right-click -> Run with PowerShell
+
+Write-Host "============================================================================" -ForegroundColor Cyan
+Write-Host "🎬 Video Downloader Server - Windows PowerShell" -ForegroundColor Cyan
+Write-Host "============================================================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Prevent system from sleeping
+Write-Host "🛡️  Preventing system sleep..." -ForegroundColor Yellow
+
+# Using PowerShell to keep system awake
+$code = @'
+[DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@
+
+$ES_CONTINUOUS = [uint32]"0x80000000"
+$ES_SYSTEM_REQUIRED = [uint32]"0x00000001"
+$ES_DISPLAY_REQUIRED = [uint32]"0x00000002"
+
+$type = Add-Type -MemberDefinition $code -Name System -Namespace Win32 -PassThru
+
+# Prevent sleep
+$null = $type::SetThreadExecutionState($ES_CONTINUOUS -bor $ES_SYSTEM_REQUIRED -bor $ES_DISPLAY_REQUIRED)
+
+Write-Host "✅ Sleep prevention enabled" -ForegroundColor Green
+Write-Host ""
+Write-Host "🚀 Starting server..." -ForegroundColor Yellow
+Write-Host ""
+
+try {
+    # Start Python server
+    python app.py
+}
+finally {
+    # Restore normal power state
+    Write-Host ""
+    Write-Host "🔄 Restoring power settings..." -ForegroundColor Yellow
+    $null = $type::SetThreadExecutionState($ES_CONTINUOUS)
+    Write-Host "✅ Power settings restored" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "Press any key to exit..." -ForegroundColor Cyan
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+
+
+# ============================================================================
+# systemd Service (Linux) - video-downloader.service
+# ============================================================================
+# Save this as: /etc/systemd/system/video-downloader.service
+# Enable: sudo systemctl enable video-downloader.service
+# Start: sudo systemctl start video-downloader.service
+
+[Unit]
+Description=Video Downloader Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/video_downloader_web
+ExecStart=/usr/bin/python3 /path/to/video_downloader_web/app.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Prevent system sleep
+ExecStartPre=/usr/bin/systemd-inhibit --what=idle:sleep --who="Video Downloader" --why="Server is running"
+
+[Install]
+WantedBy=multi-user.target
+
+
+# ============================================================================
+# LaunchAgent (macOS) - com.videodownloader.server.plist
+# ============================================================================
+# Save this as: ~/Library/LaunchAgents/com.videodownloader.server.plist
+# Load: launchctl load ~/Library/LaunchAgents/com.videodownloader.server.plist
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.videodownloader.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/caffeinate</string>
+        <string>-i</string>
+        <string>/usr/bin/python3</string>
+        <string>/path/to/video_downloader_web/app.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/videodownloader.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/videodownloader.error.log</string>
+</dict>
+</plist>
+
+
+# ============================================================================
+# Docker - Dockerfile (WITH TOR INCLUDED)
+# ============================================================================
+# Save this as: Dockerfile
+# Build: docker build -t video-downloader .
+# Run: docker run -d -p 5001:5001 -v $(pwd)/downloads:/app/downloads video-downloader
+
+FROM python:3.11-slim
+
+# Install system dependencies including Tor
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    tor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure Tor
+RUN echo "SocksPort 0.0.0.0:9050" >> /etc/tor/torrc && \
+    echo "ControlPort 9051" >> /etc/tor/torrc && \
+    echo "CookieAuthentication 0" >> /etc/tor/torrc
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY app.py .
+COPY templates/ templates/
+
+# Create downloads directory
+RUN mkdir -p downloads/videos downloads/audio
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+echo "🧅 Starting Tor service..."\n\
+service tor start\n\
+sleep 2\n\
+echo "✅ Tor is running on port 9050"\n\
+echo "🎬 Starting Video Downloader..."\n\
+python app.py\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Expose ports
+EXPOSE 5001
+
+# Run the startup script
+CMD ["/app/start.sh"]
+
+
+# ============================================================================
+# Docker Compose - docker-compose.yml (WITH TOR)
+# ============================================================================
+# Save this as: docker-compose.yml
+# Run: docker-compose up -d
+
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./download_history.json:/app/download_history.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Jakarta
+      - HOST_IP=${HOST_IP:-192.168.1.100}
+    # Add capabilities for Tor
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - video-downloader-network
+
+networks:
+  video-downloader-network:
+    driver: bridge
+
+
+# ============================================================================
+# Docker Build Script with Tor - build-and-run.sh
+# ============================================================================
+# Save this as: build-and-run.sh
+# Usage: chmod +x build-and-run.sh && ./build-and-run.sh
+
+#!/bin/bash
+
+echo "🐳 Building Video Downloader with Tor..."
+
+# Detect host IP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    HOST_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    HOST_IP=$(hostname -I | awk '{print $1}')
+else
+    HOST_IP="192.168.1.100"
+fi
+
+echo "🌐 Detected Host IP: $HOST_IP"
+
+# Build image
+docker build -t video-downloader .
+
+# Stop old container
+docker stop video-downloader 2>/dev/null
+docker rm video-downloader 2>/dev/null
+
+# Run new container
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -e HOST_IP=$HOST_IP \
+  -v $(pwd)/downloads:/app/downloads \
+  -v $(pwd)/download_history.json:/app/download_history.json \
+  --cap-add=NET_ADMIN \
+  --restart unless-stopped \
+  video-downloader
+
+echo ""
+echo "✅ Container started!"
+echo "🧅 Tor is running inside the container"
+echo ""
+echo "📱 Access URLs:"
+echo "   • Local:   http://localhost:5001"
+echo "   • Network: http://$HOST_IP:5001"
+echo ""
+echo "🔍 View logs: docker logs -f video-downloader"
+echo "🛑 Stop:      docker stop video-downloader"
+echo ""
+echo "💡 In the web UI, select proxy: 'Tor (port 9050)'"
+
+
+# ============================================================================
+# Advanced Dockerfile with Multiple Tor Instances
+# ============================================================================
+# Save this as: Dockerfile.multi-tor
+# For high-performance parallel downloads through Tor
+
+FROM python:3.11-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    tor \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure multiple Tor instances
+RUN mkdir -p /var/lib/tor-instances/tor{1,2,3}
+
+# Create Tor configs for 3 instances
+RUN for i in 1 2 3; do \
+    port=$((9050 + i - 1)); \
+    echo "SocksPort 0.0.0.0:$port" > /etc/tor/torrc$i; \
+    echo "DataDirectory /var/lib/tor-instances/tor$i" >> /etc/tor/torrc$i; \
+    echo "ControlPort $((9150 + i - 1))" >> /etc/tor/torrc$i; \
+    done
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY app.py .
+COPY templates/ templates/
+
+# Create directories
+RUN mkdir -p downloads/videos downloads/audio
+
+# Supervisor config for managing Tor instances
+RUN echo '[supervisord]\n\
+nodaemon=true\n\
+\n\
+[program:tor1]\n\
+command=/usr/bin/tor -f /etc/tor/torrc1\n\
+autorestart=true\n\
+\n\
+[program:tor2]\n\
+command=/usr/bin/tor -f /etc/tor/torrc2\n\
+autorestart=true\n\
+\n\
+[program:tor3]\n\
+command=/usr/bin/tor -f /etc/tor/torrc3\n\
+autorestart=true\n\
+\n\
+[program:app]\n\
+command=python app.py\n\
+directory=/app\n\
+autorestart=true\n\
+' > /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 5001
+
+CMD ["/usr/bin/supervisord"]
+
+
+# ============================================================================
+# Test Tor Connection Script
+# ============================================================================
+# Save this as: test-tor.sh
+# Usage: docker exec -it video-downloader bash test-tor.sh
+
+#!/bin/bash
+
+echo "🧪 Testing Tor connection..."
+
+# Check if Tor is running
+if pgrep -x "tor" > /dev/null; then
+    echo "✅ Tor process is running"
+else
+    echo "❌ Tor is not running"
+    exit 1
+fi
+
+# Test Tor connection
+echo ""
+echo "🌐 Testing connection through Tor..."
+curl --socks5 127.0.0.1:9050 https://check.torproject.org/api/ip
+
+echo ""
+echo "🔍 Your regular IP:"
+curl -s https://api.ipify.org
+
+echo ""
+echo "🧅 Your Tor IP:"
+curl --socks5 127.0.0.1:9050 -s https://api.ipify.org
+
+echo ""
+echo "✅ Tor test complete!"
+
+
+# ============================================================================
+# Docker Compose with Tor Browser Ports
+# ============================================================================
+# Save this as: docker-compose-tor-browser.yml
+# Mimics Tor Browser port configuration
+
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./download_history.json:/app/download_history.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Jakarta
+      - HOST_IP=${HOST_IP:-192.168.1.100}
+      - TOR_PORT=9050
+    cap_add:
+      - NET_ADMIN
+    command: >
+      bash -c "
+      echo 'SocksPort 0.0.0.0:9050' > /etc/tor/torrc &&
+      echo 'SocksPort 0.0.0.0:9150' >> /etc/tor/torrc &&
+      echo 'ControlPort 9051' >> /etc/tor/torrc &&
+      service tor start &&
+      sleep 3 &&
+      echo '✅ Tor available on ports 9050 and 9150' &&
+      python app.py
+      "
+    networks:
+      - video-downloader-network
+
+networks:
+  video-downloader-network:
+    driver: bridge
+
+
+# ============================================================================
+# Optimized Tor Configuration
+# ============================================================================
+# Save this as: torrc-optimized
+# Copy into Dockerfile for better performance
+
+SocksPort 0.0.0.0:9050
+SocksPort 0.0.0.0:9150
+ControlPort 9051
+CookieAuthentication 0
+
+# Performance optimizations
+NumEntryGuards 8
+CircuitBuildTimeout 30
+LearnCircuitBuildTimeout 0
+MaxCircuitDirtiness 600
+
+# Enable faster circuit creation
+KeepalivePeriod 60
+NewCircuitPeriod 15
+MaxClientCircuitsPending 48
+
+# Log level
+Log notice stdout
+
+
+# ============================================================================
+# Dockerfile with Optimized Tor
+# ============================================================================
+# Save this as: Dockerfile.optimized
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    ffmpeg curl tor && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy optimized Tor config
+COPY torrc-optimized /etc/tor/torrc
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+COPY templates/ templates/
+
+RUN mkdir -p downloads/videos downloads/audio
+
+# Startup script with health check
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "🧅 Starting Tor..."\n\
+service tor start\n\
+\n\
+# Wait for Tor to be ready\n\
+echo "⏳ Waiting for Tor to establish circuits..."\n\
+for i in {1..30}; do\n\
+    if curl --socks5 127.0.0.1:9050 -s -m 5 https://check.torproject.org/api/ip > /dev/null 2>&1; then\n\
+        echo "✅ Tor is ready!"\n\
+        break\n\
+    fi\n\
+    echo "   Attempt $i/30..."\n\
+    sleep 2\n\
+done\n\
+\n\
+echo "🎬 Starting Video Downloader..."\n\
+python app.py\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+EXPOSE 5001
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s \
+  CMD curl --socks5 127.0.0.1:9050 -f https://check.torproject.org/api/ip || exit 1
+
+CMD ["/app/start.sh"]
+
+
+# ============================================================================
+# Quick Start Commands
+# ============================================================================
+
+# Build the image with Tor
+docker build -t video-downloader .
+
+# Run with Tor included
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -v $(pwd)/downloads:/app/downloads \
+  --cap-add=NET_ADMIN \
+  video-downloader
+
+# Check Tor is running
+docker exec video-downloader curl --socks5 127.0.0.1:9050 https://check.torproject.org/api/ip
+
+# View logs
+docker logs -f video-downloader
+
+# Test download through Tor
+# In web UI: Select "Tor (port 9050)" from proxy dropdown
+
+
+# ============================================================================
+# Usage in Web UI
+# ============================================================================
+
+# After starting the Docker container with Tor:
+# 1. Open http://localhost:5001
+# 2. Enter your video URL
+# 3. Under "Proxy (optional)" select: "Tor (port 9050)"
+# 4. Click "Start Download"
+# 
+# ✅ Downloads will automatically route through Tor!
+# ✅ No need to run Tor separately on host!
+
+
+# ============================================================================
+# Troubleshooting
+# ============================================================================
+
+# Check if Tor is running inside container:
+docker exec video-downloader ps aux | grep tor
+
+# Test Tor connection:
+docker exec video-downloader curl --socks5 127.0.0.1:9050 https://check.torproject.org/api/ip
+
+# View Tor logs:
+docker exec video-downloader cat /var/log/tor/notices.log
+
+# Restart Tor inside container:
+docker exec video-downloader service tor restart
+
+# Interactive shell to debug:
+docker exec -it video-downloader bash
+
+
+# ============================================================================
+# Docker Compose - docker-compose.yml (FIXED FOR HOST IP)
+# ============================================================================
+# Save this as: docker-compose.yml
+# Run: docker-compose up -d
+
+version: '3.8'
+
+services:
+  video-downloader:
+    build: .
+    container_name: video-downloader
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./downloads:/app/downloads
+      - ./download_history.json:/app/download_history.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Jakarta
+      - HOST_IP=${HOST_IP:-192.168.1.100}  # Replace with your actual IP
+    networks:
+      - video-downloader-network
+    # Use host network mode to get real IP (alternative method)
+    # network_mode: "host"  # Uncomment this and comment out networks section
+
+networks:
+  video-downloader-network:
+    driver: bridge
+
+
+# ============================================================================
+# Docker Run Commands with Host IP Detection
+# ============================================================================
+
+# Linux/Mac - Auto-detect host IP and pass to Docker
+# ---------------------------------------------------
+# Save this as: docker-run.sh
+
+#!/bin/bash
+
+# Detect host IP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    HOST_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
+    HOST_IP=$(hostname -I | awk '{print $1}')
+else
+    # Fallback
+    HOST_IP=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+fi
+
+echo "🌐 Detected Host IP: $HOST_IP"
+
+# Build and run with host IP
+docker build -t video-downloader .
+docker run -d \
+  --name video-downloader \
+  -p 5001:5001 \
+  -e HOST_IP=$HOST_IP \
+  -v $(pwd)/downloads:/app/downloads \
+  -v $(pwd)/download_history.json:/app/download_history.json \
+  --restart unless-stopped \
+  video-downloader
+
+echo "✅ Server started!"
+echo "📱 Access at: http://$HOST_IP:5001"
+
+
+# Windows (PowerShell) - Auto-detect host IP
+# -------------------------------------------
+# Save this as: docker-run.ps1
+
+# Detect host IP
+$HOST_IP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -like "Ethernet*" -or $_.InterfaceAlias -like "Wi-Fi*"} | Select-Object -First 1).IPAddress
+
+Write-Host "🌐 Detected Host IP: $HOST_IP" -ForegroundColor Green
+
+# Build and run
+docker build -t video-downloader .
+docker run -d `
+  --name video-downloader `
+  -p 5001:5001 `
+  -e HOST_IP=$HOST_IP `
+  -v ${PWD}/downloads:/app/downloads `
+  -v ${PWD}/download_history.json:/app/download_history.json `
+  --restart unless-stopped `
+  video-downloader
+
+Write-Host "✅ Server started!" -ForegroundColor Green
+Write-Host "📱 Access at: http://${HOST_IP}:5001" -ForegroundColor Cyan
+
+
+# ============================================================================
+# Docker Compose with IP Detection - docker-start.sh
+# ============================================================================
+# Save this as: docker-start.sh
+# Usage: ./docker-start.sh
+
+#!/bin/bash
+
+# Detect host IP
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    HOST_IP=$(ipconfig getifaddr en0 || ipconfig getifaddr en1)
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    HOST_IP=$(hostname -I | awk '{print $1}')
+else
+    HOST_IP=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+fi
+
+echo "🌐 Detected Host IP: $HOST_IP"
+
+# Export for docker-compose
+export HOST_IP=$HOST_IP
+
+# Start with docker-compose
+docker-compose up -d
+
+echo ""
+echo "✅ Server started!"
+echo "📱 Local access:   http://localhost:5001"
+echo "📱 Network access: http://$HOST_IP:5001"
+echo ""
+echo "📊 View logs: docker-compose logs -f"
+echo "🛑 Stop server: docker-compose down"
+
+
+# ============================================================================
+# Alternative: Docker with Host Network Mode
+# ============================================================================
+# This uses the host's network directly (Linux only)
+
+#!/bin/bash
+# Save as: docker-run-host-network.sh
+
+docker build -t video-downloader .
+docker run -d \
+  --name video-downloader \
+  --network host \
+  -v $(pwd)/downloads:/app/downloads \
+  -v $(pwd)/download_history.json:/app/download_history.json \
+  --restart unless-stopped \
+  video-downloader
+
+HOST_IP=$(hostname -I | awk '{print $1}')
+echo "✅ Server started with host network!"
+echo "📱 Access at: http://$HOST_IP:5001"
+
+
+# ============================================================================
+# Requirements file - requirements.txt
+# ============================================================================
+# Save this as: requirements.txt
+
+flask>=3.0.0
+qrcode[pil]>=7.4.2
+yt-dlp>=2024.0.0
+curl-cffi>=0.6.0
+
+
+# ============================================================================
+# PM2 (Node.js process manager) - ecosystem.config.js
+# ============================================================================
+# Save this as: ecosystem.config.js
+# Install PM2: npm install -g pm2
+# Start: pm2 start ecosystem.config.js
+# Auto-start on boot: pm2 startup && pm2 save
+
+module.exports = {
+  apps: [{
+    name: 'video-downloader',
+    script: 'app.py',
+    interpreter: 'python3',
+    cwd: '/path/to/video_downloader_web',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production'
+    }
+  }]
+};
+
+
+# ============================================================================
+# Screen session (Linux/Mac) - run_in_screen.sh
+# ============================================================================
+# Save this as: run_in_screen.sh
+# Usage: ./run_in_screen.sh
+# Reattach: screen -r videodownloader
+
+#!/bin/bash
+echo "🎬 Starting Video Downloader in screen session..."
+
+# Create or reattach to screen session
+if screen -list | grep -q "videodownloader"; then
+    echo "📺 Reattaching to existing session..."
+    screen -r videodownloader
+else
+    echo "📺 Creating new screen session..."
+    screen -S videodownloader -dm bash -c 'caffeinate -i python3 app.py'
+    echo "✅ Server started in background!"
+    echo "📌 Reattach with: screen -r videodownloader"
+    echo "📌 Detach with: Ctrl+A then D"
+fi
+
+
+# ============================================================================
+# INSTALLATION GUIDE
+# ============================================================================
+
+# macOS (Easiest):
+# ----------------
+# 1. Save run_server_mac.sh
+# 2. chmod +x run_server_mac.sh
+# 3. ./run_server_mac.sh
+# 
+# Your laptop won't sleep while server runs!
+
+# Windows (Batch file):
+# ---------------------
+# 1. Save run_server_windows.bat
+# 2. Double-click the file
+# 
+# Sleep will be disabled automatically!
+
+# Linux:
+# ------
+# 1. Save run_server_linux.sh
+# 2. chmod +x run_server_linux.sh
+# 3. ./run_server_linux.sh
+
+# Docker (Best for 24/7):
+# -----------------------
+# 1. Create Dockerfile and docker-compose.yml
+# 2. docker-compose up -d
+# 
+# Runs forever, even after reboot!
+
+# systemd (Linux auto-start):
+# ---------------------------
+# 1. Create /etc/systemd/system/video-downloader.service
+# 2. sudo systemctl enable video-downloader
+# 3. sudo systemctl start video-downloader
+# 
+# Starts automatically on boot!
+
+# ============================================================================
+# RECOMMENDATIONS
+# ============================================================================
+
+# Best for Development: macOS/Linux shell scripts with caffeinate
+# Best for Production: Docker or systemd service
+# Best for Always-On: Docker with restart policy
+# Best for Mac Auto-start: LaunchAgent
+# Best for Linux Auto-start: systemd service
+# Best for Cross-platform: Docker

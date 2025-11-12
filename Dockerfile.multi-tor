@@ -1,0 +1,60 @@
+FROM python:3.11-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    curl \
+    tor \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure multiple Tor instances
+RUN mkdir -p /var/lib/tor-instances/tor{1,2,3}
+
+# Create Tor configs for 3 instances
+RUN for i in 1 2 3; do \
+    port=$((9050 + i - 1)); \
+    echo "SocksPort 0.0.0.0:$port" > /etc/tor/torrc$i; \
+    echo "DataDirectory /var/lib/tor-instances/tor$i" >> /etc/tor/torrc$i; \
+    echo "ControlPort $((9150 + i - 1))" >> /etc/tor/torrc$i; \
+    done
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY app.py .
+COPY templates/ templates/
+
+# Create directories
+RUN mkdir -p downloads/videos downloads/audio
+
+# Supervisor config for managing Tor instances
+RUN echo '[supervisord]\n\
+nodaemon=true\n\
+\n\
+[program:tor1]\n\
+command=/usr/bin/tor -f /etc/tor/torrc1\n\
+autorestart=true\n\
+\n\
+[program:tor2]\n\
+command=/usr/bin/tor -f /etc/tor/torrc2\n\
+autorestart=true\n\
+\n\
+[program:tor3]\n\
+command=/usr/bin/tor -f /etc/tor/torrc3\n\
+autorestart=true\n\
+\n\
+[program:app]\n\
+command=python app.py\n\
+directory=/app\n\
+autorestart=true\n\
+' > /etc/supervisor/conf.d/supervisord.conf
+
+EXPOSE 5001
+
+CMD ["/usr/bin/supervisord"]
