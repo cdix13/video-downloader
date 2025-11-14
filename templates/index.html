@@ -1850,12 +1850,42 @@
         );
       }
 
-      // Delete history entry
+      // Delete history entry and actual file
       async function deleteHistory(historyId) {
-        if (!confirm("Delete this entry from history?")) return;
+        if (
+          !confirm(
+            "⚠️ This will delete the actual file from your computer!\n\nAre you sure you want to delete this file permanently?"
+          )
+        )
+          return;
 
-        await fetch(`/api/history/${historyId}`, { method: "DELETE" });
-        loadHistory();
+        try {
+          const response = await fetch(`/api/history/${historyId}`, {
+            method: "DELETE",
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            showNotification(
+              "File Deleted! 🗑️",
+              "File has been permanently removed",
+              "✅"
+            );
+            loadHistory();
+          } else {
+            showNotification(
+              "Delete Failed! ❌",
+              data.error || "Could not delete file",
+              "⚠️"
+            );
+          }
+        } catch (error) {
+          showNotification(
+            "Error! ❌",
+            "Failed to delete file: " + error.message,
+            "⚠️"
+          );
+        }
       }
 
       // Initialize

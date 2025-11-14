@@ -48,18 +48,50 @@ download_history = []
 download_processes = {}
 
 def load_history():
-    """Load download history from file"""
+    """Load download history from actual files in download folders"""
     global download_history
-    if HISTORY_FILE.exists():
-        with open(HISTORY_FILE, 'r') as f:
-            download_history = json.load(f)
-    else:
-        download_history = []
+    download_history = []
+    
+    # Scan video folder
+    for video_file in VIDEO_DIR.glob('*'):
+        if video_file.is_file():
+            try:
+                stat = video_file.stat()
+                download_history.append({
+                    'id': str(hash(str(video_file))),  # Unique ID based on path
+                    'filename': video_file.name,
+                    'filepath': str(video_file.relative_to(DOWNLOAD_DIR)),
+                    'type': 'video',
+                    'size': stat.st_size,
+                    'timestamp': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    'date': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                })
+            except Exception as e:
+                print(f"Error reading file {video_file}: {e}")
+    
+    # Scan audio folder
+    for audio_file in AUDIO_DIR.glob('*'):
+        if audio_file.is_file():
+            try:
+                stat = audio_file.stat()
+                download_history.append({
+                    'id': str(hash(str(audio_file))),  # Unique ID based on path
+                    'filename': audio_file.name,
+                    'filepath': str(audio_file.relative_to(DOWNLOAD_DIR)),
+                    'type': 'audio',
+                    'size': stat.st_size,
+                    'timestamp': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    'date': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                })
+            except Exception as e:
+                print(f"Error reading file {audio_file}: {e}")
+    
+    # Sort by modification time (newest first)
+    download_history.sort(key=lambda x: x['timestamp'], reverse=True)
 
 def save_history():
-    """Save download history to file"""
-    with open(HISTORY_FILE, 'w') as f:
-        json.dump(download_history, f, indent=2)
+    """No longer needed - files are read directly from folders"""
+    pass
 
 def get_local_ip():
     """Get local IP address - works correctly in Docker and native"""
@@ -353,21 +385,12 @@ def download_worker(job_id, url, options):
                     else:
                         download_queue[job_id]['total_size'] = f"{actual_size} B"
                     
-                    # Add to history
-                    history_entry = {
-                        'id': str(uuid.uuid4()),
-                        'url': url,
+                    # Store file info (no need to add to history - it will be scanned from folder)
+                    download_queue[job_id]['file_info'] = {
                         'filename': file_path.name,
                         'filepath': str(file_path.relative_to(DOWNLOAD_DIR)),
-                        'type': 'audio' if options['audio_only'] else 'video',
-                        'size': actual_size,
-                        'timestamp': datetime.now().isoformat(),
-                        'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        'size': actual_size
                     }
-                    download_history.insert(0, history_entry)
-                    save_history()
-                    
-                    download_queue[job_id]['file_info'] = history_entry
             
             # Auto-remove completed download after 1 second
             threading.Timer(1.0, lambda: download_queue.pop(job_id, None)).start()
@@ -549,7 +572,9 @@ def api_queue():
 
 @app.route('/api/history')
 def api_history():
-    """Get download history"""
+    """Get download history from actual files"""
+    # Reload from folders to get fresh list
+    load_history()
     return jsonify({
         'success': True,
         'history': download_history
@@ -557,11 +582,39 @@ def api_history():
 
 @app.route('/api/history/<history_id>', methods=['DELETE'])
 def api_delete_history(history_id):
-    """Delete a history entry"""
+    """Delete a history entry and its actual file"""
     global download_history
-    download_history = [h for h in download_history if h['id'] != history_id]
-    save_history()
-    return jsonify({'success': True})
+    
+    # Find the file to delete
+    file_to_delete = None
+    for item in download_history:
+        if item['id'] == history_id:
+            file_to_delete = DOWNLOAD_DIR / item['filepath']
+            break
+    
+    if file_to_delete and file_to_delete.exists():
+        try:
+            # Delete the actual file
+            file_to_delete.unlink()
+            print(f"Deleted file: {file_to_delete}")
+            
+            # Reload history from folders
+            load_history()
+            
+            return jsonify({
+                'success': True,
+                'message': 'File deleted successfully'
+            })
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to delete file: {str(e)}'
+            }), 500
+    else:
+        return jsonify({
+            'success': False,
+            'error': 'File not found'
+        }), 404
 
 @app.route('/api/file/<path:filepath>')
 def api_serve_file(filepath):
@@ -649,7 +702,9 @@ def api_get_formats():
         }), 500
 
 if __name__ == '__main__':
+    # Load history from actual files
     load_history()
+    
     local_ip = get_local_ip()
     port = 5001
     
@@ -669,6 +724,10 @@ if __name__ == '__main__':
     print("\n📁 Download Locations:")
     print(f"   • Videos: {VIDEO_DIR}")
     print(f"   • Audio:  {AUDIO_DIR}")
+    print(f"\n📚 Download History:")
+    print(f"   • Loaded {len(download_history)} files from disk")
+    print(f"   • Files are read directly from folders")
+    print(f"   • Deleting from history also deletes the file!")
     print("\n⚠️  Keep Server Running (Prevent Sleep):")
     print("   macOS:   Run 'caffeinate -i python app.py' instead")
     print("   Windows: Disable sleep in Power Settings")

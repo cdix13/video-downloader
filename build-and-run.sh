@@ -26,7 +26,6 @@ docker run -d \
   -p 5001:5001 \
   -e HOST_IP=$HOST_IP \
   -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/download_history.json:/app/download_history.json \
   --cap-add=NET_ADMIN \
   --restart unless-stopped \
   video-downloader
