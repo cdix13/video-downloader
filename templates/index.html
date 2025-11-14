@@ -1806,7 +1806,7 @@
         });
       }
 
-      // Play file in new tab
+      // Play file in modal player or new tab
       function playFile(filepath) {
         const fileUrl = `/api/file/${filepath}`;
         const extension = filepath.split(".").pop().toLowerCase();
@@ -1832,9 +1832,22 @@
         }
       }
 
-      // Download file
+      // Download file (force download, not play)
       function downloadFile(filepath) {
-        window.location.href = `/api/file/${filepath}`;
+        // Create temporary link for download
+        const link = document.createElement("a");
+        link.href = `/api/download-file/${filepath}`;
+        link.download = filepath.split("/").pop(); // Get filename
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Show notification
+        showNotification(
+          "Download Started! 📥",
+          filepath.split("/").pop(),
+          "⬇️"
+        );
       }
 
       // Delete history entry

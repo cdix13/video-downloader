@@ -571,6 +571,18 @@ def api_serve_file(filepath):
         return send_file(file_path)
     return jsonify({'success': False, 'error': 'File not found'}), 404
 
+@app.route('/api/download-file/<path:filepath>')
+def api_download_file(filepath):
+    """Download file with proper headers (force download)"""
+    file_path = DOWNLOAD_DIR / filepath
+    if file_path.exists():
+        return send_file(
+            file_path,
+            as_attachment=True,
+            download_name=file_path.name
+        )
+    return jsonify({'success': False, 'error': 'File not found'}), 404
+
 @app.route('/api/formats', methods=['POST'])
 def api_get_formats():
     """Get available formats for a URL"""
