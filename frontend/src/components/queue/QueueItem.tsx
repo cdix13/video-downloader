@@ -21,8 +21,8 @@ export const QueueItem = memo(function QueueItem({ jobId, job }: QueueItemProps)
   const removeDownload = useRemoveDownload()
 
   const isActive = job.status === 'downloading' || job.status === 'queued'
-  const isCancelled = job.status === 'cancelled'
-  const isFinished = job.status === 'completed' || job.status === 'failed'
+  const isResumable = job.status === 'cancelled' || job.status === 'failed'
+  const isFinished = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
 
   return (
     <div className="p-3 rounded-lg bg-bg-secondary border border-border">
@@ -78,7 +78,7 @@ export const QueueItem = memo(function QueueItem({ jobId, job }: QueueItemProps)
             Cancel
           </Button>
         )}
-        {isCancelled && (
+        {isResumable && (
           <Button
             size="sm"
             variant="success"
@@ -88,7 +88,7 @@ export const QueueItem = memo(function QueueItem({ jobId, job }: QueueItemProps)
             Resume
           </Button>
         )}
-        {(isFinished || isCancelled) && (
+        {isFinished && (
           <Button
             size="sm"
             variant="ghost"

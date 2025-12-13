@@ -44,6 +44,7 @@ DOWNLOAD_DIR = BASE_DIR / 'downloads'
 VIDEO_DIR = DOWNLOAD_DIR / 'videos'
 AUDIO_DIR = DOWNLOAD_DIR / 'audio'
 HISTORY_FILE = BASE_DIR / 'download_history.json'
+QUEUE_FILE = BASE_DIR / 'download_queue.json'
 
 # Create directories
 VIDEO_DIR.mkdir(parents=True, exist_ok=True)
@@ -103,6 +104,54 @@ def load_history():
 def save_history():
     """No longer needed - files are read directly from folders"""
     pass
+
+def save_queue():
+    """Save download queue to file for persistence"""
+    try:
+        # Only save jobs that can be resumed (cancelled, failed, queued)
+        # Don't save completed or actively downloading jobs
+        saveable_statuses = {'cancelled', 'failed', 'queued'}
+        queue_to_save = {
+            job_id: {
+                'url': job['url'],
+                'options': job['options'],
+                'status': job['status'],
+                'error': job.get('error'),
+                'progress': job.get('progress', 0),
+            }
+            for job_id, job in download_queue.items()
+            if job['status'] in saveable_statuses
+        }
+        with open(QUEUE_FILE, 'w') as f:
+            json.dump(queue_to_save, f, indent=2)
+    except Exception as e:
+        print(f"Error saving queue: {e}")
+
+def load_queue():
+    """Load download queue from file"""
+    global download_queue
+    if QUEUE_FILE.exists():
+        try:
+            with open(QUEUE_FILE, 'r') as f:
+                saved_queue = json.load(f)
+
+            # Restore jobs to queue with full structure
+            for job_id, job_data in saved_queue.items():
+                download_queue[job_id] = {
+                    'url': job_data['url'],
+                    'options': job_data.get('options', {}),
+                    'status': job_data['status'],
+                    'progress': job_data.get('progress', 0),
+                    'speed': None,
+                    'eta': None,
+                    'error': job_data.get('error'),
+                    'file_info': None,
+                    'downloaded': None,
+                    'total_size': None,
+                }
+            print(f"Loaded {len(saved_queue)} jobs from queue file")
+        except Exception as e:
+            print(f"Error loading queue: {e}")
 
 def get_local_ip():
     """Get local IP address - works correctly in Docker and native"""
@@ -189,10 +238,42 @@ def check_dependencies():
     
     return missing
 
+def parse_size_to_bytes(size_str):
+    """Convert size string like '150.5MiB' to bytes"""
+    if not size_str:
+        return 0
+    size_str = size_str.strip()
+    match = re.match(r'([\d.]+)\s*([KMG]i?B)?', size_str, re.IGNORECASE)
+    if not match:
+        return 0
+    value = float(match.group(1))
+    unit = (match.group(2) or 'B').upper()
+    multipliers = {
+        'B': 1,
+        'KB': 1024,
+        'KIB': 1024,
+        'MB': 1024 * 1024,
+        'MIB': 1024 * 1024,
+        'GB': 1024 * 1024 * 1024,
+        'GIB': 1024 * 1024 * 1024,
+    }
+    return int(value * multipliers.get(unit, 1))
+
+def format_bytes(size_bytes):
+    """Format bytes to human-readable string"""
+    if size_bytes >= 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GiB"
+    elif size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MiB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.2f} KiB"
+    else:
+        return f"{size_bytes} B"
+
 def parse_progress_line(line):
     """Parse yt-dlp progress output to extract useful information"""
     info = {}
-    
+
     # Extract percentage
     percent_match = re.search(r'(\d+\.?\d*)%', line)
     if percent_match:
@@ -244,7 +325,14 @@ def parse_progress_line(line):
     )
     if comprehensive_match and 'total_size' not in info:
         info['total_size'] = comprehensive_match.group(1)
-    
+
+    # Calculate downloaded size from percentage and total_size if not directly available
+    if 'downloaded' not in info and 'progress' in info and 'total_size' in info:
+        total_bytes = parse_size_to_bytes(info['total_size'])
+        if total_bytes > 0:
+            downloaded_bytes = int((info['progress'] / 100) * total_bytes)
+            info['downloaded'] = format_bytes(downloaded_bytes)
+
     return info
 
 def download_worker(job_id, url, options):
@@ -409,10 +497,12 @@ def download_worker(job_id, url, options):
         elif download_queue[job_id]['status'] != 'cancelled':
             download_queue[job_id]['status'] = 'failed'
             download_queue[job_id]['error'] = 'Download failed'
-            
+            save_queue()
+
     except Exception as e:
         download_queue[job_id]['status'] = 'failed'
         download_queue[job_id]['error'] = str(e)
+        save_queue()
         if job_id in download_processes:
             del download_processes[job_id]
 
@@ -526,7 +616,8 @@ def api_cancel_download(job_id):
         
         if job_id in download_processes:
             del download_processes[job_id]
-    
+
+    save_queue()
     return jsonify({'success': True})
 
 @app.route('/api/remove/<job_id>', methods=['DELETE'])
@@ -552,28 +643,34 @@ def api_remove_download(job_id):
     
     # Remove from queue
     del download_queue[job_id]
-    
+
+    save_queue()
     return jsonify({'success': True})
 
 @app.route('/api/resume/<job_id>', methods=['POST'])
 def api_resume_download(job_id):
-    """Resume a cancelled download"""
+    """Resume a cancelled or failed download"""
     if job_id not in download_queue:
         return jsonify({'success': False, 'error': 'Job not found'}), 404
-    
-    if download_queue[job_id]['status'] != 'cancelled':
-        return jsonify({'success': False, 'error': 'Download is not cancelled'}), 400
+
+    resumable_statuses = {'cancelled', 'failed'}
+    if download_queue[job_id]['status'] not in resumable_statuses:
+        return jsonify({'success': False, 'error': 'Download cannot be resumed'}), 400
     
     # Restart download
     url = download_queue[job_id]['url']
     options = download_queue[job_id]['options']
     
     download_queue[job_id]['status'] = 'queued'
-    
+    download_queue[job_id]['error'] = None
+    download_queue[job_id]['progress'] = 0
+
+    save_queue()
+
     thread = threading.Thread(target=download_worker, args=(job_id, url, options))
     thread.daemon = True
     thread.start()
-    
+
     return jsonify({'success': True})
 
 @app.route('/api/status/<job_id>')
@@ -729,10 +826,12 @@ def api_get_formats():
 if __name__ == '__main__':
     # Load history from actual files
     load_history()
-    
+    # Load saved queue (cancelled/failed downloads)
+    load_queue()
+
     local_ip = get_local_ip()
     port = 5001
-    
+
     print("=" * 80)
     print("🎬 Universal Video Downloader - Web UI")
     print("=" * 80)
@@ -753,6 +852,10 @@ if __name__ == '__main__':
     print(f"   • Loaded {len(download_history)} files from disk")
     print(f"   • Files are read directly from folders")
     print(f"   • Deleting from history also deletes the file!")
+    if download_queue:
+        print(f"\n📥 Download Queue:")
+        print(f"   • Loaded {len(download_queue)} pending/cancelled jobs")
+        print(f"   • Use Resume button to restart cancelled downloads")
     print("\n⚠️  Keep Server Running (Prevent Sleep):")
     print("   macOS:   Run 'caffeinate -i python app.py' instead")
     print("   Windows: Disable sleep in Power Settings")

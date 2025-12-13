@@ -11,6 +11,7 @@ Thumbs.db
 __pycache__/
 env/
 download_history.json
+download_queue.json
 
 # Frontend
 frontend/node_modules/
