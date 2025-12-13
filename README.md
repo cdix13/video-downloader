@@ -25,12 +25,14 @@ A modern, full-stack web application for downloading videos and audio from vario
 ## Tech Stack
 
 ### Backend
+
 - **Flask** - Python web framework
 - **yt-dlp** - Video/audio downloading engine
 - **FFmpeg** - Media processing
 - **curl-cffi** - Browser impersonation for bypassing restrictions
 
 ### Frontend
+
 - **React 19** - UI framework
 - **TypeScript 5.8** - Type-safe JavaScript
 - **Vite 6** - Build tool and dev server
@@ -50,17 +52,20 @@ A modern, full-stack web application for downloading videos and audio from vario
 ### Native Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/video-downloader.git
    cd video-downloader
    ```
 
 2. **Install Python dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Install yt-dlp and FFmpeg**
+
    ```bash
    # macOS
    brew install yt-dlp ffmpeg
@@ -75,6 +80,7 @@ A modern, full-stack web application for downloading videos and audio from vario
    ```
 
 4. **Build the frontend**
+
    ```bash
    cd frontend
    npm install
@@ -83,6 +89,7 @@ A modern, full-stack web application for downloading videos and audio from vario
    ```
 
 5. **Run the application**
+
    ```bash
    python app.py
    ```
@@ -91,9 +98,19 @@ A modern, full-stack web application for downloading videos and audio from vario
    - Local: http://localhost:5001
    - Network: http://YOUR_IP:5001 (shown in terminal)
 
+### Easy Script Installation
+
+If using Mac/Linux we can use script to install and build app quickly
+
+1. **Build and run with script**
+   ```bash
+   ./build-and-run.sh
+   ```
+
 ### Docker Installation
 
 1. **Build and run with Docker**
+
    ```bash
    docker build -t video-downloader .
    docker run -d -p 5001:5001 -v $(pwd)/downloads:/app/downloads video-downloader
@@ -105,6 +122,7 @@ A modern, full-stack web application for downloading videos and audio from vario
    ```
 
 The Docker image includes:
+
 - Multi-stage build (Node.js for frontend, Python for backend)
 - Built-in Tor proxy on port 9050
 - FFmpeg and yt-dlp pre-installed
@@ -179,28 +197,28 @@ video-downloader/
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/server-info` | GET | Server URLs and QR code |
-| `/api/check-dependencies` | GET | Verify yt-dlp, ffmpeg installed |
-| `/api/download` | POST | Start a new download |
-| `/api/queue` | GET | Get all downloads in queue |
-| `/api/status/:id` | GET | Get single job status |
-| `/api/cancel/:id` | POST | Cancel active download |
-| `/api/resume/:id` | POST | Resume cancelled/failed download |
-| `/api/remove/:id` | DELETE | Remove job from queue |
-| `/api/history` | GET | Get download history |
-| `/api/history/:id` | DELETE | Delete file from history |
-| `/api/file/:path` | GET | Stream file for playback |
-| `/api/download-file/:path` | GET | Download file |
-| `/api/formats` | POST | Get available formats for URL |
+| Endpoint                   | Method | Description                      |
+| -------------------------- | ------ | -------------------------------- |
+| `/api/server-info`         | GET    | Server URLs and QR code          |
+| `/api/check-dependencies`  | GET    | Verify yt-dlp, ffmpeg installed  |
+| `/api/download`            | POST   | Start a new download             |
+| `/api/queue`               | GET    | Get all downloads in queue       |
+| `/api/status/:id`          | GET    | Get single job status            |
+| `/api/cancel/:id`          | POST   | Cancel active download           |
+| `/api/resume/:id`          | POST   | Resume cancelled/failed download |
+| `/api/remove/:id`          | DELETE | Remove job from queue            |
+| `/api/history`             | GET    | Get download history             |
+| `/api/history/:id`         | DELETE | Delete file from history         |
+| `/api/file/:path`          | GET    | Stream file for playback         |
+| `/api/download-file/:path` | GET    | Download file                    |
+| `/api/formats`             | POST   | Get available formats for URL    |
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
+| Variable  | Description                  | Default       |
+| --------- | ---------------------------- | ------------- |
 | `HOST_IP` | Override detected IP address | Auto-detected |
 
 ### Supported File Formats
@@ -248,18 +266,23 @@ systemd-inhibit python app.py
 ## Troubleshooting
 
 ### "yt-dlp not found"
+
 Install yt-dlp: `pip install yt-dlp` or `brew install yt-dlp`
 
 ### "ffmpeg not found"
+
 Install FFmpeg: `brew install ffmpeg` (macOS) or `apt install ffmpeg` (Linux)
 
 ### Download fails with 403 error
+
 Try enabling browser impersonation (uses curl-cffi) or use a proxy.
 
 ### Slow downloads
+
 Some sites throttle downloads. Try using Tor proxy or wait and retry.
 
 ### Files not showing in history
+
 Only video/audio files with supported extensions are shown. System files like `.DS_Store` are filtered out.
 
 ## License
