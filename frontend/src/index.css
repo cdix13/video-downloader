@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply bg-bg-primary text-text-primary antialiased;
+  }
+
+  body {
+    @apply min-h-screen;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-bg-secondary rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full hover:bg-text-muted;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-tertiary rounded-xl border border-border p-4 md:p-6 shadow-lg shadow-black/20;
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-gradient-primary text-white hover:opacity-90 active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply bg-bg-secondary text-text-primary border border-border hover:bg-border;
+  }
+
+  .btn-danger {
+    @apply bg-error/20 text-error border border-error/30 hover:bg-error/30;
+  }
+
+  .btn-success {
+    @apply bg-success/20 text-success border border-success/30 hover:bg-success/30;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary transition-colors;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wide;
+  }
+
+  .badge-queued {
+    @apply bg-warning/20 text-warning;
+  }
+
+  .badge-downloading {
+    @apply bg-accent-primary/20 text-accent-primary;
+  }
+
+  .badge-completed {
+    @apply bg-success/20 text-success;
+  }
+
+  .badge-failed {
+    @apply bg-error/20 text-error;
+  }
+
+  .badge-cancelled {
+    @apply bg-text-muted/20 text-text-muted;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-primary bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .shimmer {
+    @apply relative overflow-hidden;
+  }
+
+  .shimmer::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    animation: shimmer 2s infinite;
+  }
+}

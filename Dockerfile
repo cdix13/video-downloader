@@ -1,3 +1,12 @@
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Python runtime
 FROM python:3.11-slim
 
 # Install system dependencies including Tor
@@ -24,6 +33,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY app.py .
 COPY templates/ templates/
+
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Create downloads directory
 RUN mkdir -p downloads/videos downloads/audio

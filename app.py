@@ -15,7 +15,7 @@ import io
 import base64
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_file, url_for
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 from werkzeug.utils import secure_filename
 import uuid
 
@@ -28,7 +28,14 @@ except ImportError:
     print("⚠️  qrcode library not found. QR codes will be disabled.")
     print("   Install with: pip install qrcode[pil]")
 
-app = Flask(__name__)
+# Check if React frontend build exists
+FRONTEND_DIR = Path(__file__).parent / 'frontend' / 'dist'
+USE_REACT_FRONTEND = FRONTEND_DIR.exists()
+
+if USE_REACT_FRONTEND:
+    app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path='')
+else:
+    app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 
 # Configuration
@@ -47,14 +54,18 @@ download_queue = {}
 download_history = []
 download_processes = {}
 
+# Supported file extensions
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.ts', '.mpg', '.mpeg'}
+AUDIO_EXTENSIONS = {'.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.opus', '.wma'}
+
 def load_history():
     """Load download history from actual files in download folders"""
     global download_history
     download_history = []
-    
+
     # Scan video folder
     for video_file in VIDEO_DIR.glob('*'):
-        if video_file.is_file():
+        if video_file.is_file() and video_file.suffix.lower() in VIDEO_EXTENSIONS:
             try:
                 stat = video_file.stat()
                 download_history.append({
@@ -68,10 +79,10 @@ def load_history():
                 })
             except Exception as e:
                 print(f"Error reading file {video_file}: {e}")
-    
+
     # Scan audio folder
     for audio_file in AUDIO_DIR.glob('*'):
-        if audio_file.is_file():
+        if audio_file.is_file() and audio_file.suffix.lower() in AUDIO_EXTENSIONS:
             try:
                 stat = audio_file.stat()
                 download_history.append({
@@ -407,8 +418,22 @@ def download_worker(job_id, url, options):
 
 @app.route('/')
 def index():
-    """Main page"""
+    """Main page - serves React frontend if available, otherwise template"""
+    if USE_REACT_FRONTEND:
+        return send_from_directory(app.static_folder, 'index.html')
     return render_template('index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files for React frontend"""
+    if USE_REACT_FRONTEND:
+        file_path = FRONTEND_DIR / path
+        if file_path.exists() and file_path.is_file():
+            return send_from_directory(app.static_folder, path)
+        # For SPA routing, return index.html for non-file paths
+        if not path.startswith('api/'):
+            return send_from_directory(app.static_folder, 'index.html')
+    return jsonify({'error': 'Not found'}), 404
 
 @app.route('/api/check-dependencies')
 def api_check_dependencies():

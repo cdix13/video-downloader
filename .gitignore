@@ -11,3 +11,7 @@ Thumbs.db
 __pycache__/
 env/
 download_history.json
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
