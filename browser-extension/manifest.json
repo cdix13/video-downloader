@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Video Downloader - IDM Style",
+  "version": "1.0.0",
+  "description": "Detect and download videos from any website directly to your local Video Downloader app.",
+
+  "permissions": [
+    "webRequest",
+    "tabs",
+    "storage",
+    "activeTab",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Video Downloader"
+  },
+
+  "options_page": "options.html"
+}

@@ -38,6 +38,32 @@ else:
     app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 
+# ── CORS + Private Network Access ──────────────────────────────────────────────
+# Allows browser extensions (Brave/Chrome) to call the local Flask API.
+# Private Network Access (PNA) requires Access-Control-Allow-Private-Network: true
+# on both the OPTIONS preflight and the actual response.
+
+CORS_HEADERS = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Access-Control-Request-Private-Network',
+    'Access-Control-Allow-Private-Network': 'true',
+}
+
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = app.make_default_options_response()
+        for key, value in CORS_HEADERS.items():
+            response.headers[key] = value
+        return response
+
+@app.after_request
+def add_cors_headers(response):
+    for key, value in CORS_HEADERS.items():
+        response.headers[key] = value
+    return response
+
 # Configuration
 BASE_DIR = Path.cwd()
 DOWNLOAD_DIR = BASE_DIR / 'downloads'
@@ -594,6 +620,75 @@ def api_download():
         'success': True,
         'job_id': job_id
     })
+
+@app.route('/api/download-from-extension')
+def download_from_extension():
+    """
+    Browser extension downloads via this GET endpoint to avoid CORS/PNA issues.
+    The extension opens this URL in a tab; it queues the download and shows a
+    self-closing confirmation page.
+    """
+    url = request.args.get('url', '').strip()
+    audio_only = request.args.get('audio', 'false').lower() == 'true'
+
+    if not url:
+        return '<script>window.close();</script>Invalid URL', 400
+
+    job_id = str(uuid.uuid4())
+    options = {
+        'audio_only': audio_only,
+        'use_sponsorblock': False,
+        'use_impersonate': True,
+        'proxy': '',
+        'format_id': '',
+    }
+    download_queue[job_id] = {
+        'url': url,
+        'status': 'queued',
+        'progress': 0,
+        'speed': 'N/A',
+        'eta': 'N/A',
+        'total_size': 'N/A',
+        'downloaded': '0 B',
+        'options': options,
+        'created_at': datetime.now().isoformat(),
+    }
+    thread = threading.Thread(target=download_worker, args=(job_id, url, options))
+    thread.daemon = True
+    thread.start()
+
+    mode = 'Audio (MP3)' if audio_only else 'Video'
+    return f'''<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Download queued</title>
+  <style>
+    body {{ margin:0; background:#0f172a; color:#e2e8f0;
+           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+           display:flex; align-items:center; justify-content:center;
+           height:100vh; flex-direction:column; gap:12px; }}
+    .icon {{ font-size:40px; }}
+    h2 {{ margin:0; font-size:18px; }}
+    p {{ margin:0; color:#64748b; font-size:13px; max-width:400px; text-align:center; word-break:break-all; }}
+    .badge {{ background:#1e3a5f; color:#60a5fa; padding:3px 10px; border-radius:6px; font-size:12px; }}
+  </style>
+</head>
+<body>
+  <div class="icon">⬇️</div>
+  <h2>Download queued!</h2>
+  <span class="badge">{mode}</span>
+  <p>{url[:120]}{'...' if len(url) > 120 else ''}</p>
+  <p style="color:#475569;font-size:11px;margin-top:8px;">This tab will close automatically…</p>
+  <script>
+    setTimeout(() => {{
+      // Try to close; if opener exists go back, else close tab
+      if (window.opener) {{ window.close(); }}
+      else {{ window.location.href = '/'; }}
+    }}, 2000);
+  </script>
+</body>
+</html>'''
 
 @app.route('/api/cancel/<job_id>', methods=['POST'])
 def api_cancel_download(job_id):

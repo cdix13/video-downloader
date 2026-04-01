@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Video Downloader — Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    h1 { font-size: 20px; font-weight: 700; color: #f1f5f9; }
+    .subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 7px;
+      padding: 8px 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus { border-color: #2563eb; }
+    .test-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      border-radius: 7px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .test-btn:hover { background: #334155; color: #e2e8f0; }
+    .hint {
+      font-size: 11px;
+      color: #475569;
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+    .status-msg {
+      font-size: 12px;
+      margin-top: 8px;
+      min-height: 18px;
+      transition: color 0.2s;
+    }
+    .status-msg.ok { color: #22c55e; }
+    .status-msg.err { color: #ef4444; }
+
+    .save-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #1d4ed8, #2563eb);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .save-btn:hover { opacity: 0.9; }
+    .save-btn:active { opacity: 0.8; }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #1e293b;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-val { color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Video Downloader</h1>
+      <div class="subtitle">Extension Settings</div>
+    </div>
+  </div>
+
+  <!-- Server config -->
+  <div class="card">
+    <div class="card-title">Server Connection</div>
+    <label for="serverUrl">Downloader app URL</label>
+    <div class="input-row">
+      <input type="text" id="serverUrl" placeholder="http://localhost:5001" />
+      <button class="test-btn" id="testBtn">Test</button>
+    </div>
+    <div class="hint">
+      The address of your running Video Downloader Flask server.<br>
+      Default: <code style="color:#60a5fa">http://localhost:5001</code>
+    </div>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+
+  <!-- About -->
+  <div class="card">
+    <div class="card-title">About</div>
+    <div class="info-row">
+      <span>Extension version</span>
+      <span class="info-val">1.0.0</span>
+    </div>
+    <div class="info-row">
+      <span>Backend</span>
+      <span class="info-val">Flask + yt-dlp</span>
+    </div>
+    <div class="info-row">
+      <span>Supported streams</span>
+      <span class="info-val">MP4, HLS (m3u8), DASH (mpd), WebM, FLV</span>
+    </div>
+  </div>
+
+  <button class="save-btn" id="saveBtn">Save Settings</button>
+</div>
+
+<script src="options.js"></script>
+</body>
+</html>
