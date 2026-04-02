@@ -233,23 +233,30 @@ function buildVideoCard(video, index) {
   if (video.size) meta.push(formatBytes(video.size));
   if (!isPageUrl && video.contentType) meta.push(video.contentType.replace('video/', '').replace('audio/', '🎵 '));
 
+  const browserDl = video.hlsFallback ? 'true' : 'false';
+  const subMeta = isPageUrl
+    ? (video.hlsFallback
+        ? `<div class="video-meta" style="color:#f59e0b">⚡ Direct HLS — saved as .ts</div>`
+        : `<div class="video-meta" style="color:#34d399">Best quality — yt-dlp auto-selects</div>`)
+    : '';
+
   card.innerHTML = `
     <div class="card-top">
       <span class="type-badge ${typeClass}">${isPageUrl ? '⭐ ' : ''}${video.type}</span>
       <div style="flex:1;min-width:0">
         <div class="video-title" title="${escapeHtml(video.url)}">${escapeHtml(displayTitle)}</div>
         ${meta.length ? `<div class="video-meta">${meta.map(escapeHtml).join(' · ')}</div>` : ''}
-        ${isPageUrl ? `<div class="video-meta" style="color:#34d399">Best quality — yt-dlp auto-selects</div>` : ''}
+        ${subMeta}
       </div>
     </div>
     <div class="card-actions">
-      <button class="dl-btn" data-url="${escapeHtml(video.url)}" data-audio="false" data-referer="${escapeHtml(video.referer || '')}">
+      <button class="dl-btn" data-url="${escapeHtml(video.url)}" data-audio="false" data-referer="${escapeHtml(video.referer || '')}" data-browser-dl="${browserDl}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
         </svg>
         Download Video
       </button>
-      <button class="dl-audio-btn" data-url="${escapeHtml(video.url)}" data-audio="true" data-referer="${escapeHtml(video.referer || '')}" title="Download audio only (MP3)">
+      <button class="dl-audio-btn" data-url="${escapeHtml(video.url)}" data-audio="true" data-referer="${escapeHtml(video.referer || '')}" data-browser-dl="${browserDl}" title="Download audio only (MP3)">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
         </svg>
@@ -271,6 +278,7 @@ function startDownload(btn) {
   const url = btn.dataset.url;
   const audioOnly = btn.dataset.audio === 'true';
   const referer = btn.dataset.referer || null;
+  const useBrowserDownload = btn.dataset.browserDl === 'true';
   const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   // Read the title from the card
@@ -296,7 +304,7 @@ function startDownload(btn) {
     `<span class="progress-label" style="color:#60a5fa;padding:2px 0">↓ Downloading — see above</span>`;
 
   chrome.runtime.sendMessage(
-    { type: 'NATIVE_DOWNLOAD', url, audioOnly, referer, jobId, title },
+    { type: 'NATIVE_DOWNLOAD', url, audioOnly, referer, jobId, title, useBrowserDownload },
     (response) => {
       if (!response?.success) {
         showError(jobId, response?.error || 'Native host not installed. Run install.sh.');

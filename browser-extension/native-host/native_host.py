@@ -102,7 +102,24 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         '--no-playlist',
         '--newline',
         '--no-warnings',
+        '--socket-timeout', '30',
+        '--retries', '3',
+        '--force-ipv4',
+        '--user-agent', (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/124.0.0.0 Safari/537.36'
+        ),
     ]
+
+    # Try --impersonate chrome (yt-dlp ≥ 2024.04) to bypass TLS fingerprinting blocks
+    try:
+        imp_test = ytdlp + ['--impersonate', 'chrome', '--version']
+        r = subprocess.run(imp_test, capture_output=True, timeout=5)
+        if r.returncode == 0:
+            cmd += ['--impersonate', 'chrome']
+    except Exception:
+        pass
 
     # Pass Referer header so CDNs that check it (e.g. surrit.com) allow the request
     if referer:
@@ -204,6 +221,62 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         send_message({'msgType': 'error', 'error': err_msg})
 
 
+# ─── ffmpeg discovery & conversion ───────────────────────────────────────────
+
+def find_ffmpeg():
+    found = shutil.which('ffmpeg')
+    if found:
+        return found
+    candidates = [
+        '/opt/homebrew/bin/ffmpeg',
+        '/usr/local/bin/ffmpeg',
+        os.path.expanduser('~/.local/bin/ffmpeg'),
+        os.path.expanduser('~/bin/ffmpeg'),
+        os.path.expanduser('~/miniforge3/bin/ffmpeg'),
+        os.path.expanduser('~/miniconda3/bin/ffmpeg'),
+        os.path.expanduser('~/anaconda3/bin/ffmpeg'),
+    ]
+    for p in candidates:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+def run_convert(input_path):
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        send_message({'msgType': 'error',
+                      'error': 'ffmpeg not found. Install with: brew install ffmpeg'})
+        return
+
+    output_path = os.path.splitext(input_path)[0] + '.mp4'
+    send_message({'msgType': 'status', 'message': 'Converting .ts → .mp4…'})
+
+    try:
+        result = subprocess.run(
+            [ffmpeg, '-i', input_path, '-c', 'copy',
+             '-movflags', '+faststart', '-y', output_path],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            try:
+                os.remove(input_path)
+            except Exception:
+                pass
+            send_message({
+                'msgType': 'done',
+                'success': True,
+                'filename': os.path.basename(output_path),
+                'download_dir': str(Path(output_path).parent),
+            })
+        else:
+            err_lines = [l for l in result.stderr.splitlines()
+                         if l.strip() and not l.startswith('WARNING')]
+            err_msg = err_lines[-1] if err_lines else f'ffmpeg exited with code {result.returncode}'
+            send_message({'msgType': 'error', 'error': err_msg})
+    except Exception as e:
+        send_message({'msgType': 'error', 'error': str(e)})
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -224,6 +297,13 @@ def main():
             send_message({'msgType': 'error', 'error': 'No URL provided'})
             return
         run_download(url, msg.get('audio_only', False), msg.get('download_dir'), msg.get('referer'))
+
+    elif action == 'convert':
+        input_path = msg.get('input_path', '').strip()
+        if not input_path:
+            send_message({'msgType': 'error', 'error': 'No input path provided'})
+            return
+        run_convert(input_path)
 
     else:
         send_message({'msgType': 'error', 'error': f'Unknown action: {action}'})

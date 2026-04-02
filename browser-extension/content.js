@@ -201,7 +201,37 @@ const observer = new MutationObserver((mutations) => {
 
 observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
+// ─── Performance entry scan ────────────────────────────────────────────────────
+// Catches m3u8/mpd URLs loaded from cache or via service workers that
+// chrome.webRequest.onCompleted may miss.
+
+function scanPerformanceEntries() {
+  try {
+    for (const entry of performance.getEntries()) {
+      if (entry.initiatorType === 'xmlhttprequest' || entry.initiatorType === 'fetch' ||
+          entry.initiatorType === 'other' || entry.initiatorType === '') {
+        if (/\.m3u8/i.test(entry.name) || /\.mpd/i.test(entry.name)) {
+          reportUrl(entry.name);
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+// Watch for future resource loads (catches late-loading players)
+try {
+  const perfObserver = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      if (/\.m3u8/i.test(entry.name) || /\.mpd/i.test(entry.name)) {
+        reportUrl(entry.name);
+      }
+    }
+  });
+  perfObserver.observe({ entryTypes: ['resource'] });
+} catch (_) {}
+
 // Initial scan + delayed scans for late-loading players
 scanPage();
-setTimeout(scanPage, 1500);
-setTimeout(scanPage, 4000);
+scanPerformanceEntries();
+setTimeout(() => { scanPage(); scanPerformanceEntries(); }, 1500);
+setTimeout(() => { scanPage(); scanPerformanceEntries(); }, 4000);
