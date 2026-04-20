@@ -2,6 +2,36 @@
 
 const REPORTED_URLS = new Set();
 
+// ─── Overlay toggle state ──────────────────────────────────────────────────────
+// Default OFF: no buttons in the DOM until toggled on (Alt+D or popup message).
+let overlayForceVisible = false;
+
+const trackedVideos = new Set();           // every video seen on the page
+const videoButtons = new Map();            // videoEl -> { btn, onScroll, onResize }
+
+function setOverlayForceVisible(val) {
+  overlayForceVisible = val;
+  if (val) {
+    for (const videoEl of trackedVideos) createButtonForVideo(videoEl);
+  } else {
+    for (const videoEl of [...videoButtons.keys()]) removeButtonForVideo(videoEl);
+  }
+}
+
+// Alt+D toggles the overlay on/off
+document.addEventListener('keydown', (e) => {
+  if (e.altKey && e.code === 'KeyD' && !e.ctrlKey && !e.metaKey) {
+    setOverlayForceVisible(!overlayForceVisible);
+  }
+}, { capture: true });
+
+// Respond to messages from the popup or background
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'TOGGLE_OVERLAY') {
+    setOverlayForceVisible(msg.visible !== undefined ? msg.visible : !overlayForceVisible);
+  }
+});
+
 function getVideoType(url) {
   if (/\.m3u8/i.test(url)) return 'HLS';
   if (/\.mpd/i.test(url)) return 'DASH';
@@ -14,7 +44,6 @@ function getVideoType(url) {
 
 function reportUrl(url) {
   if (!url) return;
-  // Skip blob URLs (we can't download those directly) and data URIs
   if (url.startsWith('blob:') || url.startsWith('data:')) return;
 
   try {
@@ -26,14 +55,10 @@ function reportUrl(url) {
       url: abs,
       videoType: getVideoType(abs),
     }).catch(() => {});
-  } catch (_) {
-    // Invalid URL — skip
-  }
+  } catch (_) {}
 }
 
 // ─── Download overlay button ───────────────────────────────────────────────────
-// Appended to document.body with position:fixed so it always floats on top,
-// even if the video player (JavPlayer, etc.) has its own overlay divs.
 
 function injectStyles() {
   if (document.getElementById('vd-styles')) return;
@@ -74,12 +99,8 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
-// Map videoEl -> { btn, positionBtn }
-const videoButtons = new Map();
-
-function addOverlayToVideo(videoEl) {
-  if (videoEl.dataset.vdDone) return;
-  videoEl.dataset.vdDone = '1';
+function createButtonForVideo(videoEl) {
+  if (videoButtons.has(videoEl)) return;
 
   injectStyles();
 
@@ -99,41 +120,20 @@ function addOverlayToVideo(videoEl) {
   function positionBtn() {
     const rect = videoEl.getBoundingClientRect();
     if (rect.width === 0) return;
-    btn.style.top  = (rect.top  + window.scrollY + 10) + 'px';
-    btn.style.left = (rect.right + window.scrollX - btn.offsetWidth - 10) + 'px';
-    // Switch to fixed positioning so it tracks the viewport
     btn.style.position = 'fixed';
     btn.style.top  = (rect.top  + 10) + 'px';
     btn.style.left = (rect.right - btn.offsetWidth - 10) + 'px';
   }
 
-  videoButtons.set(videoEl, { btn, positionBtn });
+  const onScroll = () => positionBtn();
+  const onResize = () => positionBtn();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onResize, { passive: true });
 
-  // ── Show/hide: use document mousemove so player overlays can't block us ──
-  let hideTimer;
-  document.addEventListener('mousemove', (e) => {
-    const rect = videoEl.getBoundingClientRect();
-    const overVideo = e.clientX >= rect.left && e.clientX <= rect.right &&
-                      e.clientY >= rect.top  && e.clientY <= rect.bottom;
-    if (overVideo) {
-      clearTimeout(hideTimer);
-      positionBtn();
-      btn.classList.add('visible');
-    } else if (!btn.matches(':hover')) {
-      clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => {
-        if (!btn.matches(':hover')) btn.classList.remove('visible');
-      }, 500);
-    }
-  }, { passive: true });
+  videoButtons.set(videoEl, { btn, onScroll, onResize });
 
-  btn.addEventListener('mouseleave', () => {
-    hideTimer = setTimeout(() => btn.classList.remove('visible'), 500);
-  });
-
-  // Re-position on scroll/resize
-  window.addEventListener('scroll',  positionBtn, { passive: true });
-  window.addEventListener('resize',  positionBtn, { passive: true });
+  positionBtn();
+  btn.classList.add('visible');
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -161,11 +161,27 @@ function addOverlayToVideo(videoEl) {
   });
 }
 
+function removeButtonForVideo(videoEl) {
+  const entry = videoButtons.get(videoEl);
+  if (!entry) return;
+  const { btn, onScroll, onResize } = entry;
+  btn.remove();
+  window.removeEventListener('scroll', onScroll);
+  window.removeEventListener('resize', onResize);
+  videoButtons.delete(videoEl);
+}
+
+// Track video elements; create button immediately only when overlay is ON.
+function addOverlayToVideo(videoEl) {
+  if (trackedVideos.has(videoEl)) return;
+  trackedVideos.add(videoEl);
+  if (overlayForceVisible) createButtonForVideo(videoEl);
+}
+
 // ─── DOM scanning ──────────────────────────────────────────────────────────────
 
 function scanPage() {
   document.querySelectorAll('video').forEach(video => {
-    // Report the video src/currentSrc
     if (video.src) reportUrl(video.src);
     if (video.currentSrc && video.currentSrc !== video.src) reportUrl(video.currentSrc);
     video.querySelectorAll('source').forEach(s => { if (s.src) reportUrl(s.src); });
@@ -187,7 +203,6 @@ const observer = new MutationObserver((mutations) => {
         addOverlayToVideo(v);
       });
     }
-    // Catch src attribute changes on existing video elements
     if (
       mutation.type === 'attributes' &&
       mutation.target.tagName === 'VIDEO' &&
@@ -202,8 +217,6 @@ const observer = new MutationObserver((mutations) => {
 observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
 // ─── Performance entry scan ────────────────────────────────────────────────────
-// Catches m3u8/mpd URLs loaded from cache or via service workers that
-// chrome.webRequest.onCompleted may miss.
 
 function scanPerformanceEntries() {
   try {
@@ -218,7 +231,6 @@ function scanPerformanceEntries() {
   } catch (_) {}
 }
 
-// Watch for future resource loads (catches late-loading players)
 try {
   const perfObserver = new PerformanceObserver((list) => {
     for (const entry of list.getEntries()) {
@@ -230,7 +242,6 @@ try {
   perfObserver.observe({ entryTypes: ['resource'] });
 } catch (_) {}
 
-// Initial scan + delayed scans for late-loading players
 scanPage();
 scanPerformanceEntries();
 setTimeout(() => { scanPage(); scanPerformanceEntries(); }, 1500);
