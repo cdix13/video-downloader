@@ -82,15 +82,50 @@ DEST_RE = re.compile(r'\[download\] Destination:\s+(.+)')
 MERGER_RE = re.compile(r'\[Merger\] Merging formats into "(.+)"')
 ALREADY_RE = re.compile(r'\[download\] (.+) has already been downloaded')
 
-def run_download(url, audio_only=False, download_dir=None, referer=None):
-    ytdlp = find_ytdlp()
-    if not ytdlp:
-        send_message({'msgType': 'error', 'error': 'yt-dlp not found. Run: pip install yt-dlp'})
-        return
+import platform as _platform
 
-    out_dir = Path(download_dir) if download_dir else DOWNLOAD_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
+_home = Path.home()
+_system = _platform.system()
+_BROWSER_PROFILES = {
+    'Darwin': {
+        'chrome':   _home / 'Library/Application Support/Google/Chrome',
+        'chromium': _home / 'Library/Application Support/Chromium',
+        'brave':    _home / 'Library/Application Support/BraveSoftware/Brave-Browser',
+        'safari':   _home / 'Library/Safari',
+        'firefox':  _home / 'Library/Application Support/Firefox',
+    },
+    'Linux': {
+        'chrome':   _home / '.config/google-chrome',
+        'chromium': _home / '.config/chromium',
+        'brave':    _home / '.config/BraveSoftware/Brave-Browser',
+        'firefox':  _home / '.mozilla/firefox',
+    },
+}.get(_system, {})
 
+# Detected once at startup; cached for the whole process lifetime.
+_IMPERSONATE_SUPPORTED = None
+
+def _supports_impersonate(ytdlp):
+    global _IMPERSONATE_SUPPORTED
+    if _IMPERSONATE_SUPPORTED is None:
+        try:
+            r = subprocess.run(ytdlp + ['--impersonate', 'chrome', '--version'],
+                               capture_output=True, timeout=5)
+            _IMPERSONATE_SUPPORTED = (r.returncode == 0)
+        except Exception:
+            _IMPERSONATE_SUPPORTED = False
+    return _IMPERSONATE_SUPPORTED
+
+def _cookie_browser(is_tiktok):
+    order = ('chrome', 'chromium', 'brave', 'safari', 'firefox') if is_tiktok \
+            else ('chrome', 'chromium', 'brave')
+    for b in order:
+        p = _BROWSER_PROFILES.get(b)
+        if p and p.exists():
+            return b
+    return None
+
+def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok):
     cmd = ytdlp[:]
     if audio_only:
         cmd += ['-x', '--audio-format', 'mp3', '--audio-quality', '0']
@@ -112,20 +147,15 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         ),
     ]
 
-    # Try --impersonate chrome (yt-dlp ≥ 2024.04) to bypass TLS fingerprinting blocks
-    try:
-        imp_test = ytdlp + ['--impersonate', 'chrome', '--version']
-        r = subprocess.run(imp_test, capture_output=True, timeout=5)
-        if r.returncode == 0:
-            cmd += ['--impersonate', 'chrome']
-    except Exception:
-        pass
+    if _supports_impersonate(ytdlp):
+        cmd += ['--impersonate', 'chrome']
 
-    # Pass Referer header so CDNs that check it (e.g. surrit.com) allow the request
-    if referer:
+    # Referer
+    if is_tiktok:
+        cmd += ['--referer', 'https://www.tiktok.com/']
+    elif referer:
         cmd += ['--referer', referer]
     else:
-        # Use the URL's own origin as a fallback referer
         try:
             from urllib.parse import urlparse
             parsed = urlparse(url)
@@ -133,31 +163,22 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         except Exception:
             pass
 
-    # Use browser cookies so CDN-gated / authenticated streams work.
-    # We try brave first, then fall back. If none work yt-dlp continues without cookies.
-    for browser in ('brave', 'chrome', 'chromium'):
-        cookie_test = ytdlp + ['--cookies-from-browser', browser, '--version']
-        try:
-            r = subprocess.run(cookie_test, capture_output=True, timeout=5)
-            if r.returncode == 0:
-                cmd += ['--cookies-from-browser', browser]
-                break
-        except Exception:
-            pass
+    browser = _cookie_browser(is_tiktok)
+    if browser:
+        cmd += ['--cookies-from-browser', browser]
 
     cmd += [url]
+    return cmd
 
+
+def _run_ytdlp(cmd):
+    """Run yt-dlp, stream progress messages, return (returncode, stderr, filename)."""
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, bufsize=1)
     except Exception as e:
         send_message({'msgType': 'error', 'error': str(e)})
-        return
+        return None, '', None
 
     filename = None
     last_percent = -1
@@ -167,7 +188,6 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         if not line:
             continue
 
-        # Destination / merger lines (track filename)
         m = DEST_RE.search(line)
         if m:
             filename = os.path.basename(m.group(1))
@@ -185,11 +205,10 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
             send_message({'msgType': 'progress', 'percent': 100, 'speed': '', 'eta': '', 'size': ''})
             continue
 
-        # Progress line
         m = PROGRESS_RE.search(line)
         if m:
             percent = float(m.group(1))
-            if percent != last_percent:  # avoid flooding with identical updates
+            if percent != last_percent:
                 last_percent = percent
                 send_message({
                     'msgType': 'progress',
@@ -202,12 +221,50 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
 
         if DONE_RE.search(line):
             send_message({'msgType': 'progress', 'percent': 100, 'speed': '', 'eta': '', 'size': ''})
-            continue
 
     stderr_output = proc.stderr.read().strip() if proc.stderr else ''
     proc.wait()
+    return proc.returncode, stderr_output, filename
 
-    if proc.returncode == 0:
+
+TIKTOK_EXTRACTOR_ERROR = 'Unexpected response from webpage request'
+
+
+def _try_update_ytdlp(ytdlp):
+    """Run yt-dlp -U. Returns True if an update was applied."""
+    try:
+        r = subprocess.run(ytdlp + ['-U'], capture_output=True, text=True, timeout=60)
+        output = r.stdout + r.stderr
+        return 'Updated yt-dlp' in output or 'Updating to' in output
+    except Exception:
+        return False
+
+
+def run_download(url, audio_only=False, download_dir=None, referer=None):
+    ytdlp = find_ytdlp()
+    if not ytdlp:
+        send_message({'msgType': 'error', 'error': 'yt-dlp not found. Run: pip install yt-dlp'})
+        return
+
+    out_dir = Path(download_dir) if download_dir else DOWNLOAD_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    is_tiktok = 'tiktok.com' in url
+    cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok)
+    returncode, stderr_output, filename = _run_ytdlp(cmd)
+
+    if returncode is None:
+        return  # Popen failed, error already sent
+
+    # TikTok extractor errors are almost always fixed by updating yt-dlp.
+    # Retry once after a self-update when we see the known error string.
+    if returncode != 0 and is_tiktok and TIKTOK_EXTRACTOR_ERROR in stderr_output:
+        send_message({'msgType': 'status', 'message': 'TikTok error — updating yt-dlp and retrying…'})
+        _try_update_ytdlp(ytdlp)
+        cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok)
+        returncode, stderr_output, filename = _run_ytdlp(cmd)
+
+    if returncode == 0:
         send_message({
             'msgType': 'done',
             'success': True,
@@ -215,9 +272,11 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
             'download_dir': str(out_dir),
         })
     else:
-        # Show the actual yt-dlp error so it's actionable
-        err_lines = [l for l in stderr_output.splitlines() if l.strip() and not l.startswith('WARNING')]
-        err_msg = err_lines[-1] if err_lines else f'yt-dlp exited with code {proc.returncode}'
+        err_lines = [l for l in stderr_output.splitlines()
+                     if l.strip() and not l.startswith('WARNING')]
+        err_msg = err_lines[-1] if err_lines else f'yt-dlp exited with code {returncode}'
+        if is_tiktok and TIKTOK_EXTRACTOR_ERROR in stderr_output:
+            err_msg += ' — TikTok blocked the request. Try logging in to TikTok in Chrome and retry.'
         send_message({'msgType': 'error', 'error': err_msg})
 
 
