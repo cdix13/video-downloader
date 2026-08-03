@@ -129,6 +129,15 @@ def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok):
     cmd = ytdlp[:]
     if audio_only:
         cmd += ['-x', '--audio-format', 'mp3', '--audio-quality', '0']
+    elif is_tiktok:
+        # TikTok's h265/bytevc1 formats report an "aac" audio track in their
+        # metadata but the CDN file itself is video-only — downloading one
+        # produces a silent video. The h264 formats are the real muxed
+        # video+audio streams, so prefer them and avoid bytevc1/hevc entirely.
+        cmd += [
+            '-f', 'best[vcodec^=h264]/best[vcodec!*=hevc][vcodec!*=h265]/best',
+            '--merge-output-format', 'mp4',
+        ]
     else:
         cmd += ['-f', 'bestvideo+bestaudio/best', '--merge-output-format', 'mp4']
 
