@@ -106,12 +106,18 @@ _BROWSER_PROFILES = {
 _IMPERSONATE_SUPPORTED = None
 
 def _supports_impersonate(ytdlp):
+    # NOTE: `--impersonate chrome --version` always exits 0 even when the
+    # target is unavailable, because --version short-circuits before yt-dlp
+    # validates the impersonate target. We have to actually list the targets
+    # and check chrome isn't marked "(unavailable)" (e.g. missing/incompatible
+    # curl_cffi version).
     global _IMPERSONATE_SUPPORTED
     if _IMPERSONATE_SUPPORTED is None:
         try:
-            r = subprocess.run(ytdlp + ['--impersonate', 'chrome', '--version'],
-                               capture_output=True, timeout=5)
-            _IMPERSONATE_SUPPORTED = (r.returncode == 0)
+            r = subprocess.run(ytdlp + ['--list-impersonate-targets'],
+                               capture_output=True, timeout=10, text=True)
+            _IMPERSONATE_SUPPORTED = bool(re.search(
+                r'^chrome\S*\s', r.stdout, re.IGNORECASE | re.MULTILINE))
         except Exception:
             _IMPERSONATE_SUPPORTED = False
     return _IMPERSONATE_SUPPORTED
@@ -125,7 +131,7 @@ def _cookie_browser(is_tiktok):
             return b
     return None
 
-def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok):
+def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=True):
     cmd = ytdlp[:]
     if audio_only:
         cmd += ['-x', '--audio-format', 'mp3', '--audio-quality', '0']
@@ -159,6 +165,13 @@ def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok):
     if _supports_impersonate(ytdlp):
         cmd += ['--impersonate', 'chrome']
 
+    # Chrome launches this host with a minimal PATH, so yt-dlp's own PATH
+    # search for ffmpeg/ffprobe fails even when they're installed — point it
+    # at the binary explicitly.
+    ffmpeg_path = find_ffmpeg()
+    if ffmpeg_path:
+        cmd += ['--ffmpeg-location', ffmpeg_path]
+
     # Referer
     if is_tiktok:
         cmd += ['--referer', 'https://www.tiktok.com/']
@@ -172,9 +185,10 @@ def _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok):
         except Exception:
             pass
 
-    browser = _cookie_browser(is_tiktok)
-    if browser:
-        cmd += ['--cookies-from-browser', browser]
+    if use_cookies:
+        browser = _cookie_browser(is_tiktok)
+        if browser:
+            cmd += ['--cookies-from-browser', browser]
 
     cmd += [url]
     return cmd
@@ -238,6 +252,20 @@ def _run_ytdlp(cmd):
 
 TIKTOK_EXTRACTOR_ERROR = 'Unexpected response from webpage request'
 
+# Errors where retrying with browser cookies attached is likely to help
+# (private/age-gated/bot-checked content). Cookies are NOT attached by
+# default outside TikTok because YouTube now routes cookie-bearing requests
+# into player clients (web/web_safari) that it force-SABRs, which fail
+# without a JS challenge solver — clients that skip cookies (e.g. android_vr)
+# work fine for ordinary public videos, so we only pay the cookie cost when
+# the cookie-less attempt actually needed it.
+NEEDS_COOKIES_ERRORS = (
+    'Sign in to confirm',
+    'Private video',
+    'age',
+    'Requested format is not available',
+)
+
 
 def _try_update_ytdlp(ytdlp):
     """Run yt-dlp -U. Returns True if an update was applied."""
@@ -259,7 +287,9 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
     out_dir.mkdir(parents=True, exist_ok=True)
 
     is_tiktok = 'tiktok.com' in url
-    cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok)
+    # TikTok always needs cookies; other sites try cookie-less first (see
+    # NEEDS_COOKIES_ERRORS above for why).
+    cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=is_tiktok)
     returncode, stderr_output, filename = _run_ytdlp(cmd)
 
     if returncode is None:
@@ -270,7 +300,14 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
     if returncode != 0 and is_tiktok and TIKTOK_EXTRACTOR_ERROR in stderr_output:
         send_message({'msgType': 'status', 'message': 'TikTok error — updating yt-dlp and retrying…'})
         _try_update_ytdlp(ytdlp)
-        cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok)
+        cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=is_tiktok)
+        returncode, stderr_output, filename = _run_ytdlp(cmd)
+
+    # Retry with browser cookies attached if the cookie-less attempt hit an
+    # error cookies are likely to fix (private/age-gated/bot-checked).
+    if returncode != 0 and not is_tiktok and any(e in stderr_output for e in NEEDS_COOKIES_ERRORS):
+        send_message({'msgType': 'status', 'message': 'Retrying with browser cookies…'})
+        cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=True)
         returncode, stderr_output, filename = _run_ytdlp(cmd)
 
     if returncode == 0:
