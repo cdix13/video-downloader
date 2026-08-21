@@ -39,10 +39,24 @@ def send_message(obj):
 
 # ─── yt-dlp discovery ─────────────────────────────────────────────────────────
 
+def _ytdlp_version(cmd):
+    """Return the yt-dlp version string for a candidate command, or None."""
+    try:
+        r = subprocess.run(cmd + ['--version'], capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def find_ytdlp():
-    if shutil.which('yt-dlp'):
-        return ['yt-dlp']
-    candidates = [
+    # Multiple yt-dlp installs can exist on one machine (pyenv, homebrew,
+    # miniforge, pip --user, ...) and Chrome launches this host with a
+    # minimal PATH, so we can't just trust the first PATH/candidate match —
+    # an old install found first would silently shadow a newer one and
+    # reintroduce fixed extractor bugs (e.g. stale nsig/format handling
+    # causing HTTP 403s). Check every candidate and pick the newest version.
+    candidates = [['yt-dlp']] if shutil.which('yt-dlp') else []
+    candidates += [[p] for p in [
         '/opt/homebrew/bin/yt-dlp',
         '/usr/local/bin/yt-dlp',
         os.path.expanduser('~/.local/bin/yt-dlp'),
@@ -57,16 +71,19 @@ def find_ytdlp():
         os.path.expanduser('~/opt/miniconda3/bin/yt-dlp'),
         os.path.expanduser('~/opt/anaconda3/bin/yt-dlp'),
         os.path.expanduser('~/.pyenv/shims/yt-dlp'),
-    ]
-    for p in candidates:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return [p]
-    try:
-        subprocess.run([sys.executable, '-m', 'yt_dlp', '--version'],
-                       capture_output=True, check=True)
-        return [sys.executable, '-m', 'yt_dlp']
-    except Exception:
-        pass
+    ] if os.path.isfile(p) and os.access(p, os.X_OK)]
+
+    best_cmd, best_version = None, None
+    for cmd in candidates:
+        version = _ytdlp_version(cmd)
+        if version and (best_version is None or version > best_version):
+            best_cmd, best_version = cmd, version
+    if best_cmd:
+        return best_cmd
+
+    module_cmd = [sys.executable, '-m', 'yt_dlp']
+    if _ytdlp_version(module_cmd):
+        return module_cmd
     return None
 
 # ─── Progress parsing ─────────────────────────────────────────────────────────
@@ -252,6 +269,15 @@ def _run_ytdlp(cmd):
 
 TIKTOK_EXTRACTOR_ERROR = 'Unexpected response from webpage request'
 
+# HTTP 403s on YouTube/etc are almost always caused by a stale yt-dlp whose
+# signature/format handling no longer matches the site (see 2026-08-21 incident:
+# a shadowed old yt-dlp install kept getting picked over the updated one).
+# Self-update once and retry before giving up.
+FORBIDDEN_ERRORS = (
+    'HTTP Error 403',
+    'Forbidden',
+)
+
 # Errors where retrying with browser cookies attached is likely to help
 # (private/age-gated/bot-checked content). Cookies are NOT attached by
 # default outside TikTok because YouTube now routes cookie-bearing requests
@@ -309,6 +335,13 @@ def run_download(url, audio_only=False, download_dir=None, referer=None):
         send_message({'msgType': 'status', 'message': 'Retrying with browser cookies…'})
         cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=True)
         returncode, stderr_output, filename = _run_ytdlp(cmd)
+
+    # HTTP 403 usually means yt-dlp itself is outdated. Self-update and retry once.
+    if returncode != 0 and any(e in stderr_output for e in FORBIDDEN_ERRORS):
+        send_message({'msgType': 'status', 'message': '403 error — updating yt-dlp and retrying…'})
+        if _try_update_ytdlp(ytdlp):
+            cmd = _build_cmd(ytdlp, url, audio_only, out_dir, referer, is_tiktok, use_cookies=is_tiktok)
+            returncode, stderr_output, filename = _run_ytdlp(cmd)
 
     if returncode == 0:
         send_message({
