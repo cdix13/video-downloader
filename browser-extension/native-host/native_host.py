@@ -103,19 +103,29 @@ import platform as _platform
 
 _home = Path.home()
 _system = _platform.system()
+# Each entry points at a file only a real browser profile has, not just the
+# profile dir: installing the native host creates e.g. Google/Chrome/
+# NativeMessagingHosts even when Chrome isn't installed, and picking that
+# browser makes yt-dlp fail with "could not find chrome cookies database".
 _BROWSER_PROFILES = {
     'Darwin': {
-        'chrome':   _home / 'Library/Application Support/Google/Chrome',
-        'chromium': _home / 'Library/Application Support/Chromium',
-        'brave':    _home / 'Library/Application Support/BraveSoftware/Brave-Browser',
+        'chrome':   _home / 'Library/Application Support/Google/Chrome/Local State',
+        'chromium': _home / 'Library/Application Support/Chromium/Local State',
+        'brave':    _home / 'Library/Application Support/BraveSoftware/Brave-Browser/Local State',
+        'edge':     _home / 'Library/Application Support/Microsoft Edge/Local State',
+        'vivaldi':  _home / 'Library/Application Support/Vivaldi/Local State',
+        'opera':    _home / 'Library/Application Support/com.operasoftware.Opera/Local State',
         'safari':   _home / 'Library/Safari',
-        'firefox':  _home / 'Library/Application Support/Firefox',
+        'firefox':  _home / 'Library/Application Support/Firefox/profiles.ini',
     },
     'Linux': {
-        'chrome':   _home / '.config/google-chrome',
-        'chromium': _home / '.config/chromium',
-        'brave':    _home / '.config/BraveSoftware/Brave-Browser',
-        'firefox':  _home / '.mozilla/firefox',
+        'chrome':   _home / '.config/google-chrome/Local State',
+        'chromium': _home / '.config/chromium/Local State',
+        'brave':    _home / '.config/BraveSoftware/Brave-Browser/Local State',
+        'edge':     _home / '.config/microsoft-edge/Local State',
+        'vivaldi':  _home / '.config/vivaldi/Local State',
+        'opera':    _home / '.config/opera/Local State',
+        'firefox':  _home / '.mozilla/firefox/profiles.ini',
     },
 }.get(_system, {})
 
@@ -140,8 +150,8 @@ def _supports_impersonate(ytdlp):
     return _IMPERSONATE_SUPPORTED
 
 def _cookie_browser(is_tiktok):
-    order = ('chrome', 'chromium', 'brave', 'safari', 'firefox') if is_tiktok \
-            else ('chrome', 'chromium', 'brave')
+    chromium_family = ('chrome', 'chromium', 'brave', 'edge', 'vivaldi', 'opera')
+    order = chromium_family + ('safari', 'firefox') if is_tiktok else chromium_family
     for b in order:
         p = _BROWSER_PROFILES.get(b)
         if p and p.exists():
